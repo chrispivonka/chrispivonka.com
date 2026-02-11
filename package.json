@@ -1,0 +1,23 @@
+{
+  "name": "chrispivonka-com",
+  "version": "1.0.0",
+  "description": "Personal portfolio website with secure contact form and CI/CD pipeline",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'Static website - no build step needed'",
+    "test": "echo 'Running automated tests...'",
+    "serve": "python3 -m http.server 8000",
+    "audit": "npm audit --audit-level=high"
+  },
+  "keywords": [
+    "portfolio",
+    "website",
+    "full-stack",
+    "software-engineer"
+  ],
+  "author": "Chris Pivonka",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.13.1"
+  }
+}

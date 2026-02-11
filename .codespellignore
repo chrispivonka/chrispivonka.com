@@ -1,0 +1,10 @@
+# Codespell ignore file
+.git
+node_modules
+.venv
+venv
+.mypy_cache
+.pytest_cache
+htmlcov
+*.min.js
+bootstrap

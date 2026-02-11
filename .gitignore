@@ -134,3 +134,127 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+.DS_Store
+Thumbs.db
+
+# IDE and Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.vim/
+.netrwhist
+
+# OS specific
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# GitHub Actions
+.act/
+act.log
+
+# Local testing
+*.local
+test-results.json
+test-report.html
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# Build outputs
+dist/
+build/
+*.min.css
+*.min.js
+
+# Lighthouse reports
+lhr.json
+lighthouse-report.json
+
+# Secrets (IMPORTANT!)
+*.key
+*.pem
+*.p12
+.env*
+!.env.example
+
+# Cache
+.cache/
+.eslintcache
+.stylelintcache
+node_modules/.cache/
+
+# Specific to this project
+# DynamoDB local
+.dynamodb/
+
+# API artifacts
+*.openapi.json
+validation-report.json
+trivy-results.sarif
+
+# AI assistants
+# .claude/

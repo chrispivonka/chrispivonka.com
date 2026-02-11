@@ -1,0 +1,10 @@
+# Code owners for chrispivonka.com repository
+# These owners will be automatically requested for review when someone opens a PR
+
+* @chrispivonka
+
+# Specific files
+.github/ @chrispivonka
+*.html @chrispivonka
+js/ @chrispivonka
+css/ @chrispivonka

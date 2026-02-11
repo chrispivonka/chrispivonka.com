@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate GitHub App token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AUTOMATION_BOT_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_BOT_PRIVATE_KEY }}
+        continue-on-error: true
+
+      - name: Run Release Please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: >-
+            ${{ steps.generate_token.outputs.token ||
+            secrets.GITHUB_TOKEN }}
+          release-type: node
+          package-name: chrispivonka-com
+          changelog-types: |
+            [{
+              "type": "feat",
+              "section": "Features",
+              "hidden": false
+            },
+            {
+              "type": "fix",
+              "section": "Bug Fixes",
+              "hidden": false
+            },
+            {
+              "type": "docs",
+              "section": "Documentation",
+              "hidden": false
+            },
+            {
+              "type": "sec",
+              "section": "Security",
+              "hidden": false
+            }]
+
+  auto-merge-release:
+    runs-on: ubuntu-latest
+    name: Auto-merge Release PR
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created != 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate GitHub App token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AUTOMATION_BOT_APP_ID }}
+          private-key: ${{ secrets.AUTOMATION_BOT_PRIVATE_KEY }}
+        continue-on-error: true
+
+      - name: Approve and enable auto-merge for release PR
+        env:
+          GH_TOKEN: >-
+            ${{ steps.generate_token.outputs.token ||
+            secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh pr list --repo ${{ github.repository }} \
+            --search "type:pr state:open \
+            label:autorelease:pending" \
+            --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Found release PR: #$PR_NUMBER"
+
+            # Approve the PR
+            gh pr review $PR_NUMBER \
+              --repo ${{ github.repository }} --approve || true
+
+            # Enable auto-merge
+            gh pr merge $PR_NUMBER --repo ${{ github.repository }} \
+              --squash --auto --delete-branch || true
+
+            echo "Release PR #$PR_NUMBER approved and auto-merge enabled"
+          else
+            echo "No release PR found (already created)"
+          fi
+        continue-on-error: true
