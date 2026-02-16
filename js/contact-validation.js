@@ -1,4 +1,12 @@
 // Contact form validation
+import {
+  sanitizeInput,
+  isValidName,
+  isValidEmail,
+  isValidPhone,
+  isValidMessage
+} from "./validation-helpers.js";
+
 const API_ENDPOINT =
   "https://674lumu19j.execute-api.us-west-2.amazonaws.com/prod/contact";
 
@@ -23,100 +31,6 @@ const wittyErrorMessages = [
   "Hold up! Name, Email, and Message are required. No pressure though!",
   "Nice try! But we're gonna need Name, Email, and Message to make this work."
 ];
-
-// Sanitization function to remove HTML/script tags and malicious content
-function sanitizeInput(input) {
-  if (!input) {
-    return "";
-  }
-
-  // Remove any HTML tags
-  let sanitized = input.replace(/<[^>]*>/g, "");
-
-  // Remove script-like patterns
-  sanitized = sanitized.replace(/javascript:/gi, "");
-  sanitized = sanitized.replace(/on\w+\s*=/gi, "");
-
-  // Decode HTML entities to prevent double encoding
-  sanitized = sanitized.replace(/&/g, "&amp;");
-  sanitized = sanitized.replace(/</g, "&lt;");
-  sanitized = sanitized.replace(/>/g, "&gt;");
-  sanitized = sanitized.replace(/"/g, "&quot;");
-  sanitized = sanitized.replace(/'/g, "&#x27;");
-
-  return sanitized.trim();
-}
-
-// Validate name format (letters, spaces, hyphens, apostrophes)
-function isValidName(name) {
-  const cleaned = sanitizeInput(name).trim();
-  if (!cleaned || cleaned.length < 2) {
-    return false;
-  }
-  if (cleaned.length > 100) {
-    return false;
-  }
-
-  // Allow letters, spaces, hyphens, apostrophes
-  const nameRegex = /^[a-zA-Z\s\-']+$/;
-  return nameRegex.test(cleaned);
-}
-
-// Validate email format
-function isValidEmail(email) {
-  const cleaned = sanitizeInput(email).trim().toLowerCase();
-  // RFC 5322 simplified email validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(cleaned)) {
-    return false;
-  }
-
-  // Additional checks
-  if (cleaned.length > 254) {
-    return false;
-  }
-  if (cleaned.split("@")[0].length > 64) {
-    return false;
-  }
-
-  return true;
-}
-
-// Validate phone number format (basic validation, optional field)
-function isValidPhone(phone) {
-  if (!phone || phone.trim() === "") {
-    return true; // Optional field
-  }
-
-  const cleaned = sanitizeInput(phone).trim();
-
-  // Allow various phone formats
-  const phoneRegex = /^[\d\s\-()+]+$/;
-  if (!phoneRegex.test(cleaned)) {
-    return false;
-  }
-
-  // Remove non-digits to check length
-  const digitsOnly = cleaned.replace(/\D/g, "");
-  if (digitsOnly.length < 7 || digitsOnly.length > 15) {
-    return false;
-  }
-
-  return true;
-}
-
-// Validate message length and content
-function isValidMessage(message) {
-  const cleaned = sanitizeInput(message).trim();
-  if (!cleaned || cleaned.length < 5) {
-    return false;
-  }
-  if (cleaned.length > 5000) {
-    return false;
-  }
-
-  return true;
-}
 
 function validateContactForm(event) {
   event.preventDefault();
@@ -325,3 +239,12 @@ document.addEventListener("DOMContentLoaded", function () {
     contactForm.addEventListener("submit", validateContactForm);
   }
 });
+
+// Export functions for testing
+export {
+  initCsrfToken,
+  validateContactForm,
+  submitForm,
+  showErrorModal,
+  showSuccessModal
+};

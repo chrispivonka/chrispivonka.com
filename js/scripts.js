@@ -43,11 +43,20 @@ async function loadPartials() {
   }
 }
 
-// Load partials before other initialization
-loadPartials().then(() => {
-  // Initialize dark mode and back-to-top after partials are loaded
-  initializeScripts();
-});
+// Only load partials when DOM is ready to avoid fetch errors during module loading
+if (typeof document !== "undefined" && document.readyState !== "loading") {
+  // DOM is already loaded
+  loadPartials().then(() => {
+    initializeScripts();
+  });
+} else if (typeof document !== "undefined") {
+  // Wait for DOM to load
+  document.addEventListener("DOMContentLoaded", () => {
+    loadPartials().then(() => {
+      initializeScripts();
+    });
+  });
+}
 
 function initializeScripts() {
   // Update current year in footer
@@ -122,3 +131,6 @@ function initializeScripts() {
     }
   }
 }
+
+// Export functions for testing
+export { loadPartials, initializeScripts };

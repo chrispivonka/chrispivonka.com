@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(aws apigateway create-deployment:*)",
+      "Bash(aws apigateway get-stage:*)",
+      "Bash(aws apigateway get-resources:*)",
+      "Bash(aws apigateway get-method:*)",
+      "Bash(aws apigateway get-resource:*)",
+      "Bash(aws apigateway get-rest-api:*)",
+      "Bash(curl:*)",
+      "Bash(pip install:*)",
+      "Bash(python3 -m pip install:*)",
+      "Bash(yamllint:*)",
+      "Bash(./bin/act:*)",
+      "Bash(cat:*)",
+      "Bash(gh run view:*)",
+      "Bash(docker exec:*)"
+    ]
+  }
+}
