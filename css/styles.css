@@ -12409,3 +12409,7 @@ html.dark-mode .btn-secondary:hover {
 main {
   padding-top: 4rem;
 }
+
+.form-textarea-lg {
+  height: 10rem !important;
+}

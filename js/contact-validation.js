@@ -7,7 +7,7 @@ let CSRF_TOKEN = "";
 
 // Initialize CSRF token from meta tag or generate one
 function initCsrfToken() {
-  const metaToken = document.querySelector('meta[name="csrf-token"]');
+  const metaToken = document.querySelector("meta[name=\"csrf-token\"]");
   if (metaToken) {
     CSRF_TOKEN = metaToken.getAttribute("content");
   }
@@ -21,12 +21,14 @@ const wittyErrorMessages = [
   "Come on, you can do better than that! Fill out the required fields.",
   "Oops! Looks like your form is incomplete. We need the essentials!",
   "Hold up! Name, Email, and Message are required. No pressure though!",
-  "Nice try! But we're gonna need Name, Email, and Message to make this work.",
+  "Nice try! But we're gonna need Name, Email, and Message to make this work."
 ];
 
 // Sanitization function to remove HTML/script tags and malicious content
 function sanitizeInput(input) {
-  if (!input) return "";
+  if (!input) {
+    return "";
+  }
 
   // Remove any HTML tags
   let sanitized = input.replace(/<[^>]*>/g, "");
@@ -48,8 +50,12 @@ function sanitizeInput(input) {
 // Validate name format (letters, spaces, hyphens, apostrophes)
 function isValidName(name) {
   const cleaned = sanitizeInput(name).trim();
-  if (!cleaned || cleaned.length < 2) return false;
-  if (cleaned.length > 100) return false;
+  if (!cleaned || cleaned.length < 2) {
+    return false;
+  }
+  if (cleaned.length > 100) {
+    return false;
+  }
 
   // Allow letters, spaces, hyphens, apostrophes
   const nameRegex = /^[a-zA-Z\s\-']+$/;
@@ -61,28 +67,40 @@ function isValidEmail(email) {
   const cleaned = sanitizeInput(email).trim().toLowerCase();
   // RFC 5322 simplified email validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(cleaned)) return false;
+  if (!emailRegex.test(cleaned)) {
+    return false;
+  }
 
   // Additional checks
-  if (cleaned.length > 254) return false;
-  if (cleaned.split("@")[0].length > 64) return false;
+  if (cleaned.length > 254) {
+    return false;
+  }
+  if (cleaned.split("@")[0].length > 64) {
+    return false;
+  }
 
   return true;
 }
 
 // Validate phone number format (basic validation, optional field)
 function isValidPhone(phone) {
-  if (!phone || phone.trim() === "") return true; // Optional field
+  if (!phone || phone.trim() === "") {
+    return true; // Optional field
+  }
 
   const cleaned = sanitizeInput(phone).trim();
 
   // Allow various phone formats
-  const phoneRegex = /^[\d\s\-\(\)\+]+$/;
-  if (!phoneRegex.test(cleaned)) return false;
+  const phoneRegex = /^[\d\s\-()+]+$/;
+  if (!phoneRegex.test(cleaned)) {
+    return false;
+  }
 
   // Remove non-digits to check length
   const digitsOnly = cleaned.replace(/\D/g, "");
-  if (digitsOnly.length < 7 || digitsOnly.length > 15) return false;
+  if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+    return false;
+  }
 
   return true;
 }
@@ -90,8 +108,12 @@ function isValidPhone(phone) {
 // Validate message length and content
 function isValidMessage(message) {
   const cleaned = sanitizeInput(message).trim();
-  if (!cleaned || cleaned.length < 5) return false;
-  if (cleaned.length > 5000) return false;
+  if (!cleaned || cleaned.length < 5) {
+    return false;
+  }
+  if (cleaned.length > 5000) {
+    return false;
+  }
 
   return true;
 }
@@ -125,7 +147,7 @@ function validateContactForm(event) {
   } else if (!isValidName(name)) {
     document.getElementById("name").classList.add("is-invalid");
     errors.push(
-      "Name must be at least 2 characters and contain only letters, spaces, hyphens, and apostrophes",
+      "Name must be at least 2 characters and contain only letters, spaces, hyphens, and apostrophes"
     );
   }
 
@@ -162,7 +184,7 @@ function validateContactForm(event) {
     email: email,
     phone: phone || "",
     message: message,
-    csrf_token: CSRF_TOKEN,
+    csrf_token: CSRF_TOKEN
   };
 
   submitForm(formData);
@@ -229,14 +251,14 @@ async function submitForm(formData) {
     const submitButton = document.getElementById("submitButton");
     submitButton.disabled = true;
     submitButton.innerHTML =
-      '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+      "<span class=\"spinner-border spinner-border-sm me-2\"></span>Sending...";
 
     const response = await fetch(API_ENDPOINT, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify(formData),
+      body: JSON.stringify(formData)
     });
 
     const result = await response.json();

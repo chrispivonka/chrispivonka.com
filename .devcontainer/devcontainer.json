@@ -23,7 +23,8 @@
         "usernamehw.errorlens",
         "streetsidesoftware.code-spell-checker",
         "ms-vscode.live-server",
-        "shd101wyy.markdown-preview-enhanced"
+        "shd101wyy.markdown-preview-enhanced",
+        "github.vscode-github-actions"
       ],
       "settings": {
         "editor.formatOnSave": true,
