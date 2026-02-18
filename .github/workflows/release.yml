@@ -29,6 +29,7 @@ jobs:
           app-id: ${{ secrets.AUTOMATION_BOT_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_BOT_PRIVATE_KEY }}
         continue-on-error: true
+        if: ${{ secrets.AUTOMATION_BOT_APP_ID != '' }}
 
       - name: Run Release Please
         id: release
@@ -77,6 +78,7 @@ jobs:
           app-id: ${{ secrets.AUTOMATION_BOT_APP_ID }}
           private-key: ${{ secrets.AUTOMATION_BOT_PRIVATE_KEY }}
         continue-on-error: true
+        if: ${{ secrets.AUTOMATION_BOT_APP_ID != '' }}
 
       - name: Approve and enable auto-merge for release PR
         env:

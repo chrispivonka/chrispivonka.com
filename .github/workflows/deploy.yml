@@ -17,8 +17,9 @@ jobs:
     name: Deploy to S3
     # Only deploy if Release workflow succeeded (or manual trigger)
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success') &&
+      secrets.AWS_ACCESS_KEY_ID != ''
 
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +74,7 @@ jobs:
       contents: read
       pages: write
       id-token: write
+      pull-requests: read
 
     environment:
       name: github-pages

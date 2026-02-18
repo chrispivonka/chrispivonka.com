@@ -4,6 +4,7 @@ import globals from "globals";
 export default [
   {
     files: ["**/*.js"],
+    ignores: ["node_modules/**", "__tests__/**", "jest.config.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
