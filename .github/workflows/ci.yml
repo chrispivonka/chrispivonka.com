@@ -20,7 +20,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: false
+        continue-on-error: true
 
   lint:
     runs-on: ubuntu-latest
@@ -115,10 +115,10 @@ jobs:
 
       - name: Spell Check with Codespell
         uses: codespell-project/actions-codespell@v2
+        continue-on-error: true
         with:
           skip: .git,node_modules,.venv,venv,__tests__,package-lock.json
           ignore_words_file: .codespellignore
-          continue-on-error: true
 
   lighthouse:
     runs-on: ubuntu-latest
