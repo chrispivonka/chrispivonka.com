@@ -12,7 +12,6 @@ import {
   isValidMessage
 } from "../js/validation-helpers.js";
 import {
-  initCsrfToken,
   validateContactForm,
   submitForm,
   showErrorModal,
@@ -78,24 +77,6 @@ describe("Contact Form Validation (contact-validation.js)", () => {
     jest.clearAllMocks();
   });
 
-  describe("CSRF Token Initialization", () => {
-    it("should retrieve CSRF token from meta tag", () => {
-      global.document.querySelector = jest.fn((selector) => ({
-        getAttribute: jest.fn(() => "token-value-123")
-      }));
-
-      initCsrfToken();
-      expect(global.document.querySelector).toHaveBeenCalledWith("meta[name=\"csrf-token\"]");
-    });
-
-    it("should handle missing CSRF meta tag", () => {
-      global.document.querySelector = jest.fn(() => null);
-
-      initCsrfToken();
-      expect(global.document.querySelector).toHaveBeenCalled();
-    });
-  });
-
   describe("Form Input Validation", () => {
     it("should accept valid form data", () => {
       const validName = "John Doe";
@@ -148,16 +129,6 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       };
       expect(request.method).toBe("POST");
       expect(request.headers["Content-Type"]).toBe("application/json");
-    });
-
-    it("should include CSRF token in request", () => {
-      const formData = {
-        name: "Test",
-        email: "test@example.com",
-        message: "Test",
-        csrf_token: "token-123"
-      };
-      expect(formData.csrf_token).toBe("token-123");
     });
 
     it("should handle successful API response", async () => {
@@ -331,11 +302,6 @@ describe("Contact Form Validation (contact-validation.js)", () => {
   });
 
   describe("Exported Contact Validation Functions", () => {
-    it("should export initCsrfToken function", () => {
-      expect(initCsrfToken).toBeDefined();
-      expect(typeof initCsrfToken).toBe("function");
-    });
-
     it("should export validateContactForm function", () => {
       expect(validateContactForm).toBeDefined();
       expect(typeof validateContactForm).toBe("function");
@@ -354,15 +320,6 @@ describe("Contact Form Validation (contact-validation.js)", () => {
     it("should export showSuccessModal function", () => {
       expect(showSuccessModal).toBeDefined();
       expect(typeof showSuccessModal).toBe("function");
-    });
-
-    it("should initialize CSRF token from meta tag", () => {
-      global.document.querySelector = jest.fn((selector) => ({
-        getAttribute: jest.fn(() => "test-token-123")
-      }));
-
-      initCsrfToken();
-      expect(global.document.querySelector).toHaveBeenCalledWith("meta[name=\"csrf-token\"]");
     });
 
     it("should validate contact form with valid data", () => {
@@ -563,30 +520,54 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       expect(event.preventDefault).toHaveBeenCalled();
     });
 
-    it("should handle CSRF token initialization", () => {
-      global.document.querySelector = jest.fn((selector) => ({
-        getAttribute: jest.fn(() => "test-token-value")
-      }));
+    it("should silently reject bot submissions via honeypot", () => {
+      const mockElements = {
+        name: { value: "John Doe", classList: { add: jest.fn(), remove: jest.fn() } },
+        email: { value: "john@example.com", classList: { add: jest.fn(), remove: jest.fn() } },
+        phone: { value: "", classList: { add: jest.fn(), remove: jest.fn() } },
+        message: { value: "This is a test message", classList: { add: jest.fn(), remove: jest.fn() } },
+        website: { value: "spam-bot-value" },
+        submitButton: { disabled: false, innerHTML: "Submit" },
+        contactForm: { reset: jest.fn() }
+      };
 
-      try {
-        initCsrfToken();
-      } catch (e) {
-        // May error
-      }
+      global.document.getElementById = jest.fn((id) => mockElements[id] || null);
 
-      expect(global.document.querySelector).toHaveBeenCalledWith("meta[name=\"csrf-token\"]");
+      const event = { preventDefault: jest.fn() };
+      const result = validateContactForm(event);
+
+      expect(result).toBe(false);
+      expect(event.preventDefault).toHaveBeenCalled();
     });
 
-    it("should handle CSRF token when meta tag is missing", () => {
-      global.document.querySelector = jest.fn(() => null);
+    it("should allow submission when honeypot is empty", () => {
+      const mockElements = {
+        name: { value: "John Doe", classList: { add: jest.fn(), remove: jest.fn() } },
+        email: { value: "john@example.com", classList: { add: jest.fn(), remove: jest.fn() } },
+        phone: { value: "", classList: { add: jest.fn(), remove: jest.fn() } },
+        message: { value: "This is a valid test message", classList: { add: jest.fn(), remove: jest.fn() } },
+        website: { value: "" },
+        submitButton: { disabled: false, innerHTML: "Submit" },
+        contactForm: { reset: jest.fn() }
+      };
+
+      global.document.getElementById = jest.fn((id) => mockElements[id] || null);
+      global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
+      global.bootstrap = {
+        Modal: jest.fn(function() {
+          this.show = jest.fn();
+        })
+      };
+
+      const event = { preventDefault: jest.fn() };
 
       try {
-        initCsrfToken();
+        validateContactForm(event);
       } catch (e) {
-        // Expected - meta tag not found
+        // May error due to DOM operations
       }
 
-      expect(global.document.querySelector).toHaveBeenCalled();
+      expect(event.preventDefault).toHaveBeenCalled();
     });
 
     it("should test multiple validation errors at once", () => {
@@ -773,46 +754,18 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       expect(errors[2]).toBe("Message is too short");
     });
 
-    it("should test form initialization with CSRF token", () => {
-      global.document.querySelector = jest.fn((selector) => ({
-        getAttribute: jest.fn((attr) => "csrf-token-value-123")
-      }));
-
-      global.document.getElementById = jest.fn((id) => {
-        if (id === "contactForm") {
-          return {
-            addEventListener: jest.fn()
-          };
-        }
-        return null;
-      });
-
-      global.document.addEventListener = jest.fn();
-
-      try {
-        initCsrfToken();
-      } catch (e) {
-        // May error
-      }
-
-      expect(global.document.querySelector).toHaveBeenCalled();
-      expect(global.document.getElementById).toBeDefined();
-    });
-
     it("should handle submitForm data preparation", async () => {
       const formData = {
         name: "John Doe",
         email: "john@example.com",
         phone: "5551234567",
-        message: "Test message",
-        csrf_token: "test-token"
+        message: "Test message"
       };
 
       // Verify data structure is correct
       expect(formData.name).toBeTruthy();
       expect(formData.email).toContain("@");
       expect(formData.message).toBeTruthy();
-      expect(formData.csrf_token).toBeTruthy();
     });
 
     it("should test submitForm with loading state changes", () => {
@@ -923,8 +876,7 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       const formData = {
         name: "Test",
         email: "test@example.com",
-        message: "Test message",
-        csrf_token: "token"
+        message: "Test message"
       };
 
       try {
@@ -963,8 +915,7 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       const formData = {
         name: "Test User",
         email: "test@example.com",
-        message: "Test message content",
-        csrf_token: "token-123"
+        message: "Test message content"
       };
 
       try {
@@ -1065,7 +1016,6 @@ describe("Contact Form Validation (contact-validation.js)", () => {
 
       // Simulate the module-level DOMContentLoaded listener from contact-validation.js
       document.addEventListener("DOMContentLoaded", () => {
-        initCsrfToken();
         const contactForm = global.document.getElementById("contactForm");
         if (contactForm) {
           contactForm.addEventListener("submit", validateContactForm);
@@ -1164,10 +1114,9 @@ describe("Contact Form Validation (contact-validation.js)", () => {
         return null;
       });
 
-      // Simulate the module-level code from lines 232-241
+      // Simulate the module-level code from contact-validation.js
       if (typeof document !== "undefined") {
         document.addEventListener("DOMContentLoaded", function () {
-          initCsrfToken();
           const contactForm = document.getElementById("contactForm");
           if (contactForm) {
             contactForm.addEventListener("submit", validateContactForm);

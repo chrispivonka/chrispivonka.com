@@ -10,17 +10,6 @@ import {
 const API_ENDPOINT =
   "https://674lumu19j.execute-api.us-west-2.amazonaws.com/prod/contact";
 
-// CSRF Token - generated server-side, embedded in page
-let CSRF_TOKEN = "";
-
-// Initialize CSRF token from meta tag or generate one
-function initCsrfToken() {
-  const metaToken = document.querySelector("meta[name=\"csrf-token\"]");
-  if (metaToken) {
-    CSRF_TOKEN = metaToken.getAttribute("content");
-  }
-}
-
 const wittyErrorMessages = [
   "Looks like you forgot something! Mind filling out the required fields?",
   "Houston, we have a problem. Some fields are missing!",
@@ -92,13 +81,19 @@ function validateContactForm(event) {
     return false;
   }
 
+  // Honeypot spam check - if the hidden field has a value, it's a bot
+  const honeypotField = document.getElementById("website");
+  if (honeypotField && honeypotField.value) {
+    // Silently reject bot submissions
+    return false;
+  }
+
   // If validation passes, submit the form to Lambda
   const formData = {
     name: name,
     email: email,
     phone: phone || "",
-    message: message,
-    csrf_token: CSRF_TOKEN
+    message: message
   };
 
   submitForm(formData);
@@ -231,9 +226,6 @@ function showSuccessModal() {
 
 // Initialize form validation when DOM is ready
 document.addEventListener("DOMContentLoaded", function () {
-  // Initialize CSRF token
-  initCsrfToken();
-
   const contactForm = document.getElementById("contactForm");
   if (contactForm) {
     contactForm.addEventListener("submit", validateContactForm);
@@ -242,7 +234,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Export functions for testing
 export {
-  initCsrfToken,
   validateContactForm,
   submitForm,
   showErrorModal,

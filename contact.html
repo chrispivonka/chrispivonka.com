@@ -14,7 +14,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://674lumu19j.execute-api.us-west-2.amazonaws.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+      content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com; img-src 'self' data: https://chrispivonka.com; connect-src 'self' https://674lumu19j.execute-api.us-west-2.amazonaws.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
    >
     <meta
       http-equiv="Permissions-Policy"
@@ -26,8 +26,6 @@
     <meta property="og:title" content="Contact Chris Pivonka">
     <meta property="og:description" content="Get in touch with Chris">
     <meta property="og:url" content="https://chrispivonka.com/contact.html">
-    <!-- CSRF Token for form security -->
-    <meta name="csrf-token" content="contact-form-submission">
     <title>Contact Me - chrispivonka.com</title>
     <!-- Favicon-->
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
@@ -73,6 +71,17 @@
                 <!-- * * SB Forms Contact Form * *-->
                 <!-- * * * * * * * * * * * * * * *-->
                 <form id="contactForm">
+                  <!-- Honeypot field - hidden from users, catches bots -->
+                  <div aria-hidden="true" style="position:absolute;left:-9999px">
+                    <label for="website">Website</label>
+                    <input
+                      type="text"
+                      id="website"
+                      name="website"
+                      tabindex="-1"
+                      autocomplete="off"
+                    >
+                  </div>
                   <!-- Name input-->
                   <div class="form-floating mb-3">
                     <input
