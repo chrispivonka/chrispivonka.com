@@ -14,7 +14,13 @@
       "Bash(./bin/act:*)",
       "Bash(cat:*)",
       "Bash(gh run view:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(npm test:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh run list:*)",
+      "Bash(.codespellignore << 'EOF'\n# Test files with placeholder text\n__tests__/**\n\n# Package lock\npackage-lock.json\n\n# Common abbreviations and typos that are false positives\nOT\nEOF)"
     ]
   }
 }

@@ -1,10 +1,8 @@
-# Codespell ignore file
-.git
-node_modules
-.venv
-venv
-.mypy_cache
-.pytest_cache
-htmlcov
-*.min.js
-bootstrap
+# Test files with placeholder text
+__tests__/**
+
+# Package lock
+package-lock.json
+
+# Common abbreviations and typos that are false positives
+OT
