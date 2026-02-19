@@ -1,0 +1,17 @@
+{
+  "name": "Chris Pivonka - Software Engineer",
+  "short_name": "Chris Pivonka",
+  "description": "Personal portfolio showcasing full-stack web development projects",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e30f3",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "assets/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

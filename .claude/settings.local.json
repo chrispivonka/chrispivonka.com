@@ -20,7 +20,16 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(gh run list:*)",
-      "Bash(.codespellignore << 'EOF'\n# Test files with placeholder text\n__tests__/**\n\n# Package lock\npackage-lock.json\n\n# Common abbreviations and typos that are false positives\nOT\nEOF)"
+      "Bash(.codespellignore << 'EOF'\n# Test files with placeholder text\n__tests__/**\n\n# Package lock\npackage-lock.json\n\n# Common abbreviations and typos that are false positives\nOT\nEOF)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(gh pr create --title \"Fix workflow syntax errors with secret conditions\" --body \"$\\(cat <<''EOF''\n## Summary\nFixes syntax errors in Release and Deploy workflows that prevent them from running after CI passes.\n\n## Changes\n- Remove invalid secret condition from Release workflow job\n- Remove invalid secret condition from Deploy workflow job condition  \n- Add proper step-level if conditions for AWS credentials checks\n- Secrets can only be checked in step conditions, not job conditions\n\n## Why\nGitHub Actions doesn''t allow comparing secrets in job-level `if` conditions. They must be used in step-level conditions instead, with continue-on-error to handle missing secrets gracefully.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\" --repo chrispivonka/chrispivonka.com --base main --head dev)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(git rebase:*)",
+      "Bash(node:*)",
+      "Bash(python3 -c:*)"
     ]
   }
 }
