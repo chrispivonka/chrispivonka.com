@@ -19,12 +19,14 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    env:
+      HAS_AWS_CREDENTIALS: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
-        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: env.HAS_AWS_CREDENTIALS == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -32,7 +34,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Sync files to S3
-        if: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+        if: env.HAS_AWS_CREDENTIALS == 'true'
         run: |
           aws s3 sync . s3://${{ secrets.AWS_S3_BUCKET }} \
             --exclude ".git/*" \
@@ -50,7 +52,7 @@ jobs:
             --delete
 
       - name: Invalidate CloudFront distribution
-        if: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != '' }}
+        if: secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != ''
         continue-on-error: true
         run: |
           if [ -n "${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
