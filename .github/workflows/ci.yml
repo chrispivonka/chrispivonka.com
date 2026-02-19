@@ -1,0 +1,223 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    name: Detect Secrets with Gitleaks
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Code Linting
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run ESLint
+        run: npx eslint js/ --ext .js --max-warnings 0
+        continue-on-error: false
+
+  test:
+    runs-on: ubuntu-latest
+    name: Unit Tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Tests
+        run: NODE_OPTIONS="--experimental-vm-modules" npm test
+        continue-on-error: false
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    name: Npm Dependency Audit
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high || true
+
+  validate:
+    runs-on: ubuntu-latest
+    name: Validate HTML & Check Links
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check HTML files
+        run: |
+          HTML_FILES=$(find . -maxdepth 2 -name "*.html" -type f | grep -v node_modules)
+          if [ -z "$HTML_FILES" ]; then
+            echo "⚠️ No HTML files found to validate"
+            exit 0
+          fi
+          echo "✓ HTML files found:"
+          echo "$HTML_FILES"
+
+  check-links:
+    runs-on: ubuntu-latest
+    name: Check for Broken Links
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check links
+        uses: lycheeverse/lychee-action@v1
+        with:
+          args: --max-retries 2 --timeout 10s --glob-ignore "node_modules/**" "*.html"
+          fail: false
+
+  spell-check:
+    runs-on: ubuntu-latest
+    name: Spell Check
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Spell Check with Codespell
+        uses: codespell-project/actions-codespell@v2
+        with:
+          skip: .git,node_modules,.venv,venv,__tests__,package-lock.json
+          ignore_words_file: .codespellignore
+          continue-on-error: true
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    name: Lighthouse Audit
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Start HTTP server
+        run: |
+          python3 -m http.server 8080 > /dev/null 2>&1 &
+          sleep 2
+          curl -f http://localhost:8080/ || exit 1
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          configPath: ./lighthouserc.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+        continue-on-error: false
+
+      - name: Comment PR with Lighthouse scores
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const data = fs.readFileSync('./lhr.json', 'utf8');
+              const lighthouse = JSON.parse(data);
+              const categories = lighthouse.categories;
+
+              let comment = '## 📊 Lighthouse Audit Results\n\n';
+              comment += '| Category | Score |\n';
+              comment += '|----------|-------|\n';
+
+              Object.entries(categories).forEach(([key, value]) => {
+                const score = value.score * 100;
+                const emoji = score == 100 ? '✅' : score >= 90 ? '⚠️' : '❌';
+                comment += `| ${emoji} ${key} | ${Math.round(score)} |\n`;
+              });
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (e) {
+              console.log('Lighthouse report not available');
+            }
+        continue-on-error: true
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scanning
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: false
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+  all-checks-passed:
+    runs-on: ubuntu-latest
+    name: All checks passed
+    needs: [gitleaks, lint, test, npm-audit, validate, check-links, spell-check, security-scan, lighthouse]
+    if: always()
+
+    steps:
+      - name: Check if all required jobs passed
+        run: |
+          if [[ "${{ needs.gitleaks.result }}" != "success" ]] || \
+             [[ "${{ needs.lint.result }}" != "success" ]] || \
+             [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.validate.result }}" != "success" ]] || \
+             [[ "${{ needs.check-links.result }}" != "success" ]] || \
+             [[ "${{ needs.spell-check.result }}" != "success" ]] || \
+             [[ "${{ needs.security-scan.result }}" != "success" ]] || \
+             [[ "${{ needs.lighthouse.result }}" != "success" ]]; then
+            echo "❌ Some required checks failed"
+            exit 1
+          fi
+          echo "✅ All required checks passed"

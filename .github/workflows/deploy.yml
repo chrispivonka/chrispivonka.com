@@ -1,0 +1,96 @@
+name: Deploy Website
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger
+
+concurrency:
+  group: deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy-s3:
+    runs-on: ubuntu-latest
+    name: Deploy to S3
+    # Only deploy if Release workflow succeeded (or manual trigger)
+    if: >-
+      (github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success') &&
+      secrets.AWS_ACCESS_KEY_ID != ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Sync files to S3
+        run: |
+          aws s3 sync . s3://${{ secrets.AWS_S3_BUCKET }} \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "node_modules/*" \
+            --exclude ".venv/*" \
+            --exclude ".*" \
+            --exclude "*.md" \
+            --exclude "*.py" \
+            --exclude "*.json" \
+            --exclude ".editorconfig" \
+            --include "robots.txt" \
+            --include "sitemap.xml" \
+            --include ".well-known/*" \
+            --delete
+
+      - name: Invalidate CloudFront distribution
+        continue-on-error: true
+        run: |
+          if [ -n "${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
+            aws cloudfront create-invalidation \
+              --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }} \
+              --paths "/*"
+          fi
+
+      - name: S3 Deployment Status
+        run: |
+          echo "✅ Website deployed to S3!"
+          echo "Bucket: ${{ secrets.AWS_S3_BUCKET }}"
+
+  deploy-pages:
+    runs-on: ubuntu-latest
+    name: Deploy to GitHub Pages
+    # Only deploy if Release workflow succeeded (or manual trigger)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      pull-requests: read
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v3

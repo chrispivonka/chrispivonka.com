@@ -1,0 +1,8 @@
+# Test files with placeholder text
+__tests__/**
+
+# Package lock
+package-lock.json
+
+# Common abbreviations and typos that are false positives
+OT
