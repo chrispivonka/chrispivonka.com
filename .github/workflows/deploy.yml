@@ -53,7 +53,7 @@ jobs:
             --delete
 
       - name: Invalidate CloudFront distribution
-        if: secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != ''
+        if: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != '' }}
         continue-on-error: true
         run: |
           if [ -n "${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
