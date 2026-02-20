@@ -37,29 +37,8 @@ jobs:
           token: >-
             ${{ steps.generate_token.outputs.token ||
             secrets.GITHUB_TOKEN }}
-          release-type: node
-          package-name: chrispivonka-com
-          changelog-types: |
-            [{
-              "type": "feat",
-              "section": "Features",
-              "hidden": false
-            },
-            {
-              "type": "fix",
-              "section": "Bug Fixes",
-              "hidden": false
-            },
-            {
-              "type": "docs",
-              "section": "Documentation",
-              "hidden": false
-            },
-            {
-              "type": "sec",
-              "section": "Security",
-              "hidden": false
-            }]
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
   auto-merge-release:
     runs-on: ubuntu-latest
