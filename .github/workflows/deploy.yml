@@ -66,3 +66,36 @@ jobs:
         run: |
           echo "✅ Website deployed to S3!"
           echo "Bucket: ${{ secrets.AWS_S3_BUCKET }}"
+
+  deploy-pages:
+    runs-on: ubuntu-latest
+    name: Deploy to GitHub Pages
+    # Only deploy if Release workflow succeeded (or manual trigger)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      pull-requests: read
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: "."
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v3
