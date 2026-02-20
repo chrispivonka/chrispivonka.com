@@ -38,15 +38,12 @@ jobs:
         if: env.HAS_AWS_CREDENTIALS == 'true'
         run: |
           aws s3 sync . s3://${{ secrets.AWS_S3_BUCKET }} \
-            --exclude ".git/*" \
-            --exclude ".github/*" \
-            --exclude "node_modules/*" \
-            --exclude ".venv/*" \
-            --exclude ".*" \
-            --exclude "*.md" \
-            --exclude "*.py" \
-            --exclude "*.json" \
-            --exclude ".editorconfig" \
+            --exclude "*" \
+            --include "*.html" \
+            --include "css/*" \
+            --include "js/*" \
+            --include "assets/*" \
+            --include "partials/*" \
             --include "robots.txt" \
             --include "sitemap.xml" \
             --include "manifest.json" \
@@ -97,4 +94,4 @@ jobs:
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v3
+        uses: actions/deploy-pages@v4
