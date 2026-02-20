@@ -1,5 +1,42 @@
-import validator from "validator";
-import DOMPurify from "dompurify";
+// Dynamic imports for npm packages - fall back to browser-native alternatives
+let validator;
+let DOMPurify;
+
+try {
+  validator = (await import("validator")).default;
+} catch {
+  // Browser fallback - use regex-based validation
+  validator = {
+    isEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    },
+    isMobilePhone(phone) {
+      return /^[+]?[\d\s\-().]{7,20}$/.test(phone);
+    },
+    isLength(str, opts) {
+      return str.length >= (opts.min || 0) && str.length <= (opts.max || Infinity);
+    }
+  };
+}
+
+try {
+  DOMPurify = (await import("dompurify")).default;
+} catch {
+  // Browser fallback - use native DOM sanitization
+  DOMPurify = {
+    sanitize(input, opts) {
+      if (typeof document !== "undefined") {
+        const div = document.createElement("div");
+        div.textContent = input;
+        return opts && opts.ALLOWED_TAGS && opts.ALLOWED_TAGS.length === 0
+          ? div.textContent
+          : div.innerHTML;
+      }
+      // Strip HTML tags as last resort
+      return input.replace(/<[^>]*>/g, "");
+    }
+  };
+}
 
 /**
  * Sanitize user input to prevent XSS attacks
