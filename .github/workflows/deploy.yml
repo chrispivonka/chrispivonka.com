@@ -21,6 +21,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     env:
       HAS_AWS_CREDENTIALS: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+      HAS_CLOUDFRONT: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -53,14 +54,12 @@ jobs:
             --delete
 
       - name: Invalidate CloudFront distribution
-        if: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != '' }}
+        if: env.HAS_CLOUDFRONT == 'true'
         continue-on-error: true
         run: |
-          if [ -n "${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
-            aws cloudfront create-invalidation \
-              --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }} \
-              --paths "/*"
-          fi
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
 
       - name: S3 Deployment Status
         run: |
