@@ -257,4 +257,4 @@ validation-report.json
 trivy-results.sarif
 
 # AI assistants
-# .claude/
+.claude/

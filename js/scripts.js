@@ -64,7 +64,7 @@ function initializeScripts() {
   // so elements added via fetch() need manual initialization
   if (typeof bootstrap !== "undefined") {
     document
-      .querySelectorAll('[data-bs-toggle="collapse"]')
+      .querySelectorAll("[data-bs-toggle=\"collapse\"]")
       .forEach((el) => new bootstrap.Collapse(el, { toggle: false }));
   }
 
@@ -93,7 +93,7 @@ function initializeScripts() {
       e.preventDefault();
       window.scrollTo({
         top: 0,
-        behavior: "smooth"
+        behavior: "smooth",
       });
     });
   }
@@ -107,7 +107,7 @@ function initializeScripts() {
     // Check for saved dark mode preference or system preference
     const savedMode = localStorage.getItem("darkMode");
     const prefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)"
+      "(prefers-color-scheme: dark)",
     ).matches;
 
     if (savedMode === "enabled" || (savedMode === null && prefersDark)) {
