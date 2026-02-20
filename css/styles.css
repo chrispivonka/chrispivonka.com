@@ -12281,6 +12281,17 @@ html.dark-mode .dark-mode-toggle {
   }
 }
 
+/* Social icon sizing */
+.social-icon {
+  font-size: 1.25rem;
+}
+
+/* Honeypot anti-spam field - visually hidden */
+.honeypot-field {
+  position: absolute;
+  left: -9999px;
+}
+
 /* Form styling for consistency across modes */
 .form-control,
 .form-select,
