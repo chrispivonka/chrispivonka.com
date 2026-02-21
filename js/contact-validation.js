@@ -121,9 +121,7 @@ function showErrorModal(errors) {
     </ul>
   `;
 
-  // Show the modal using Bootstrap
-  const bootstrapModal = new bootstrap.Modal(modal);
-  bootstrapModal.show();
+  showModal(modal);
 }
 
 function createErrorModal() {
@@ -220,8 +218,50 @@ function showSuccessModal() {
     document.body.appendChild(modal);
   }
 
-  const bootstrapModal = new bootstrap.Modal(modal);
-  bootstrapModal.show();
+  showModal(modal);
+}
+
+function showModal(modal) {
+  if (window.bootstrap && window.bootstrap.Modal) {
+    window.bootstrap.Modal.getOrCreateInstance(modal).show();
+    return;
+  }
+
+  if (!modal.dataset.fallbackBound) {
+    modal.addEventListener("click", (event) => {
+      if (event.target.closest("[data-bs-dismiss=\"modal\"]")) {
+        hideFallbackModal(modal);
+      }
+    });
+    modal.dataset.fallbackBound = "true";
+  }
+
+  modal.classList.add("show");
+  modal.style.display = "block";
+  modal.removeAttribute("aria-hidden");
+  modal.setAttribute("aria-modal", "true");
+
+  if (!document.querySelector(".modal-backdrop")) {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop fade show";
+    document.body.appendChild(backdrop);
+  }
+
+  document.body.classList.add("modal-open");
+}
+
+function hideFallbackModal(modal) {
+  modal.classList.remove("show");
+  modal.style.display = "none";
+  modal.setAttribute("aria-hidden", "true");
+  modal.removeAttribute("aria-modal");
+
+  const backdrop = document.querySelector(".modal-backdrop");
+  if (backdrop) {
+    backdrop.remove();
+  }
+
+  document.body.classList.remove("modal-open");
 }
 
 // Initialize form validation when DOM is ready

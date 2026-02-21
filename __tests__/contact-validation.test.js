@@ -35,12 +35,16 @@ describe("Contact Form Validation (contact-validation.js)", () => {
 
     mockForm = { reset: jest.fn() };
 
-    // Mock bootstrap Modal
+    // Mock bootstrap Modal with static getOrCreateInstance
+    const mockModalInstance = { show: jest.fn() };
     global.bootstrap = {
-      Modal: jest.fn(function() {
+      Modal: Object.assign(jest.fn(function() {
         this.show = jest.fn();
+      }), {
+        getOrCreateInstance: jest.fn(() => mockModalInstance)
       })
     };
+    global.window.bootstrap = global.bootstrap;
 
     // Mock global document methods
     global.document.getElementById = jest.fn((id) => {
@@ -554,10 +558,11 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       global.document.getElementById = jest.fn((id) => mockElements[id] || null);
       global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
       global.bootstrap = {
-        Modal: jest.fn(function() {
+        Modal: Object.assign(jest.fn(function() {
           this.show = jest.fn();
-        })
+        }), { getOrCreateInstance: jest.fn(() => ({ show: jest.fn() })) })
       };
+      global.window.bootstrap = global.bootstrap;
 
       const event = { preventDefault: jest.fn() };
 
@@ -685,10 +690,11 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       global.document.getElementById = jest.fn((id) => mockElements[id] || null);
       global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
       global.bootstrap = {
-        Modal: jest.fn(function() {
+        Modal: Object.assign(jest.fn(function() {
           this.show = jest.fn();
-        })
+        }), { getOrCreateInstance: jest.fn(() => ({ show: jest.fn() })) })
       };
+      global.window.bootstrap = global.bootstrap;
 
       const event = { preventDefault: jest.fn() };
 
@@ -722,10 +728,11 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       );
 
       global.bootstrap = {
-        Modal: jest.fn(function() {
+        Modal: Object.assign(jest.fn(function() {
           this.show = jest.fn();
-        })
+        }), { getOrCreateInstance: jest.fn(() => ({ show: jest.fn() })) })
       };
+      global.window.bootstrap = global.bootstrap;
 
       expect(mockSubmitButton).toBeDefined();
       expect(mockForm.reset).toBeDefined();
@@ -868,10 +875,11 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       );
 
       global.bootstrap = {
-        Modal: jest.fn(function() {
+        Modal: Object.assign(jest.fn(function() {
           this.show = jest.fn();
-        })
+        }), { getOrCreateInstance: jest.fn(() => ({ show: jest.fn() })) })
       };
+      global.window.bootstrap = global.bootstrap;
 
       const formData = {
         name: "Test",
@@ -907,10 +915,11 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       );
 
       global.bootstrap = {
-        Modal: jest.fn(function() {
+        Modal: Object.assign(jest.fn(function() {
           this.show = jest.fn();
-        })
+        }), { getOrCreateInstance: jest.fn(() => ({ show: jest.fn() })) })
       };
+      global.window.bootstrap = global.bootstrap;
 
       const formData = {
         name: "Test User",
@@ -935,10 +944,11 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       global.document.getElementById = jest.fn(() => null);
 
       global.bootstrap = {
-        Modal: jest.fn(function() {
+        Modal: Object.assign(jest.fn(function() {
           this.show = jest.fn();
-        })
+        }), { getOrCreateInstance: jest.fn(() => ({ show: jest.fn() })) })
       };
+      global.window.bootstrap = global.bootstrap;
 
       try {
         showErrorModal(errors);
@@ -954,10 +964,11 @@ describe("Contact Form Validation (contact-validation.js)", () => {
       global.document.getElementById = jest.fn(() => null);
 
       global.bootstrap = {
-        Modal: jest.fn(function() {
+        Modal: Object.assign(jest.fn(function() {
           this.show = jest.fn();
-        })
+        }), { getOrCreateInstance: jest.fn(() => ({ show: jest.fn() })) })
       };
+      global.window.bootstrap = global.bootstrap;
 
       try {
         showSuccessModal();

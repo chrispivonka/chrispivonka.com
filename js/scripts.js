@@ -74,6 +74,8 @@ function initializeScripts() {
     currentYearElement.textContent = new Date().getFullYear();
   }
 
+  setActiveNavLink();
+
   // Back to top button functionality
   const backToTopBtn = document.getElementById("backToTopBtn");
 
@@ -139,6 +141,32 @@ function initializeScripts() {
       icon.classList.add("bi-moon-fill");
     }
   }
+}
+
+function setActiveNavLink() {
+  const navLinks = document.querySelectorAll(".navbar .nav-link");
+  if (!navLinks.length) {
+    return;
+  }
+
+  const path = window.location.pathname;
+  const currentPage = path.split("/").pop() || "index.html";
+
+  navLinks.forEach((link) => {
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("http")) {
+      return;
+    }
+
+    const targetPage = href.split("/").pop();
+    if (targetPage === currentPage) {
+      link.classList.add("active");
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.classList.remove("active");
+      link.removeAttribute("aria-current");
+    }
+  });
 }
 
 // Export functions for testing
