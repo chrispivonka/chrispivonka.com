@@ -64,7 +64,7 @@ function initializeScripts() {
   // so elements added via fetch() need manual initialization
   if (typeof bootstrap !== "undefined") {
     document
-      .querySelectorAll("[data-bs-toggle=\"collapse\"]")
+      .querySelectorAll(".navbar-collapse")
       .forEach((el) => new bootstrap.Collapse(el, { toggle: false }));
   }
 
@@ -83,7 +83,7 @@ function initializeScripts() {
   if (backToTopBtn) {
     // Show/hide button based on scroll position
     window.addEventListener("scroll", function () {
-      if (window.pageYOffset > 10) {
+      if (window.pageYOffset > 300) {
         backToTopBtn.classList.add("show");
       } else {
         backToTopBtn.classList.remove("show");
