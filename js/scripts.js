@@ -59,15 +59,6 @@ if (typeof document !== "undefined" && document.readyState !== "loading") {
 }
 
 function initializeScripts() {
-  // Initialize Bootstrap components on dynamically loaded partials
-  // Bootstrap auto-initializes data-bs-* attributes only at page load,
-  // so elements added via fetch() need manual initialization
-  if (typeof bootstrap !== "undefined") {
-    document
-      .querySelectorAll(".navbar-collapse")
-      .forEach((el) => new bootstrap.Collapse(el, { toggle: false }));
-  }
-
   // Update current year in footer
   const currentYearElement = document.getElementById("current-year");
   if (currentYearElement) {
