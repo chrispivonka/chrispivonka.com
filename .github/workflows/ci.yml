@@ -16,7 +16,7 @@ jobs:
     name: Detect Secrets with Gitleaks
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -31,7 +31,7 @@ jobs:
     name: Code Linting
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -50,7 +50,7 @@ jobs:
     name: Unit Tests
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -70,7 +70,7 @@ jobs:
     continue-on-error: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -85,7 +85,7 @@ jobs:
     name: Validate HTML & Check Links
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check HTML files
         run: |
@@ -102,7 +102,7 @@ jobs:
     name: Check for Broken Links
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check links
         uses: lycheeverse/lychee-action@v1
@@ -115,7 +115,7 @@ jobs:
     name: Spell Check
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Spell Check with Codespell
         uses: codespell-project/actions-codespell@v2
@@ -129,7 +129,7 @@ jobs:
     name: Lighthouse Audit
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -187,7 +187,7 @@ jobs:
     name: Security Scanning
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
