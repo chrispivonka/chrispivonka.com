@@ -24,7 +24,7 @@ jobs:
       HAS_CLOUDFRONT: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS Credentials
         if: env.HAS_AWS_CREDENTIALS == 'true'
@@ -82,7 +82,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
