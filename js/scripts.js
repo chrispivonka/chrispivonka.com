@@ -59,6 +59,28 @@ if (typeof document !== "undefined" && document.readyState !== "loading") {
 }
 
 function initializeScripts() {
+  // Initialize navbar toggler for mobile
+  // Bootstrap's data-bs-toggle relies on event delegation, but the navbar
+  // is loaded dynamically via fetch(). Manually bind the toggle to ensure
+  // it works reliably across all mobile browsers.
+  const toggler = document.querySelector(".navbar-toggler");
+  const navCollapse = document.getElementById("navbarSupportedContent");
+  if (toggler && navCollapse) {
+    toggler.addEventListener("click", function () {
+      if (typeof bootstrap !== "undefined") {
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(navCollapse);
+        bsCollapse.toggle();
+      } else {
+        // Fallback if Bootstrap JS hasn't loaded
+        navCollapse.classList.toggle("show");
+        toggler.setAttribute(
+          "aria-expanded",
+          String(navCollapse.classList.contains("show"))
+        );
+      }
+    });
+  }
+
   // Update current year in footer
   const currentYearElement = document.getElementById("current-year");
   if (currentYearElement) {

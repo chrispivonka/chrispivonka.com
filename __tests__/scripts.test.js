@@ -1634,5 +1634,121 @@ describe("Common Scripts (scripts.js)", () => {
       expect(mockIcon.classList.remove).toHaveBeenCalledWith("bi-sun-fill");
       expect(mockIcon.classList.add).toHaveBeenCalledWith("bi-moon-fill");
     });
+
+    it("should initialize navbar toggler click handler with Bootstrap", () => {
+      const mockNavCollapse = {
+        classList: {
+          toggle: jest.fn(),
+          contains: jest.fn(() => false)
+        }
+      };
+
+      const mockToggler = {
+        addEventListener: jest.fn(),
+        setAttribute: jest.fn()
+      };
+
+      const mockBsCollapse = { toggle: jest.fn() };
+
+      document.querySelector = jest.fn((selector) => {
+        if (selector === ".navbar-toggler") return mockToggler;
+        return null;
+      });
+
+      document.getElementById = jest.fn((id) => {
+        if (id === "navbarSupportedContent") return mockNavCollapse;
+        return null;
+      });
+
+      window.localStorage = {
+        getItem: jest.fn(() => null),
+        setItem: jest.fn(),
+        removeItem: jest.fn()
+      };
+
+      window.addEventListener = jest.fn();
+
+      // Set up bootstrap global with Collapse
+      globalThis.bootstrap = {
+        Collapse: {
+          getOrCreateInstance: jest.fn(() => mockBsCollapse)
+        }
+      };
+
+      try {
+        initializeScripts();
+      } catch (e) {
+        // May error due to DOM setup
+      }
+
+      // Verify toggler click handler was registered
+      expect(mockToggler.addEventListener).toHaveBeenCalledWith(
+        "click",
+        expect.any(Function)
+      );
+
+      // Simulate click to exercise Bootstrap branch
+      const clickHandler = mockToggler.addEventListener.mock.calls[0][1];
+      clickHandler();
+
+      expect(globalThis.bootstrap.Collapse.getOrCreateInstance).toHaveBeenCalledWith(mockNavCollapse);
+      expect(mockBsCollapse.toggle).toHaveBeenCalled();
+
+      delete globalThis.bootstrap;
+    });
+
+    it("should initialize navbar toggler with fallback when Bootstrap is unavailable", () => {
+      const mockNavCollapse = {
+        classList: {
+          toggle: jest.fn(),
+          contains: jest.fn(() => true)
+        }
+      };
+
+      const mockToggler = {
+        addEventListener: jest.fn(),
+        setAttribute: jest.fn()
+      };
+
+      document.querySelector = jest.fn((selector) => {
+        if (selector === ".navbar-toggler") return mockToggler;
+        return null;
+      });
+
+      document.getElementById = jest.fn((id) => {
+        if (id === "navbarSupportedContent") return mockNavCollapse;
+        return null;
+      });
+
+      window.localStorage = {
+        getItem: jest.fn(() => null),
+        setItem: jest.fn(),
+        removeItem: jest.fn()
+      };
+
+      window.addEventListener = jest.fn();
+
+      // Ensure bootstrap is not defined
+      delete globalThis.bootstrap;
+
+      try {
+        initializeScripts();
+      } catch (e) {
+        // May error due to DOM setup
+      }
+
+      // Verify toggler click handler was registered
+      expect(mockToggler.addEventListener).toHaveBeenCalledWith(
+        "click",
+        expect.any(Function)
+      );
+
+      // Simulate click to exercise fallback branch
+      const clickHandler = mockToggler.addEventListener.mock.calls[0][1];
+      clickHandler();
+
+      expect(mockNavCollapse.classList.toggle).toHaveBeenCalledWith("show");
+      expect(mockToggler.setAttribute).toHaveBeenCalledWith("aria-expanded", "true");
+    });
   });
 });
