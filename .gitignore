@@ -247,6 +247,9 @@ lighthouse-report.json
 .stylelintcache
 node_modules/.cache/
 
+# Kitty-cam secrets
+kitty-cam/allowed-emails.txt
+
 # Specific to this project
 # DynamoDB local
 .dynamodb/

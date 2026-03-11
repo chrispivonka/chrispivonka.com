@@ -48,6 +48,7 @@ jobs:
             --include "sitemap.xml" \
             --include "manifest.json" \
             --include ".well-known/*" \
+            --exclude "kitty-cam/*" \
             --delete
 
       - name: Invalidate CloudFront distribution
@@ -87,10 +88,27 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      - name: Prepare deployment artifact
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude='kitty-cam/' \
+            --exclude='node_modules/' \
+            --exclude='.git/' \
+            --exclude='__tests__/' \
+            --exclude='coverage/' \
+            --exclude='.github/' \
+            --exclude='package*.json' \
+            --exclude='jest.config.js' \
+            --exclude='eslint.config.js' \
+            --exclude='.env*' \
+            --exclude='_site/' \
+            . _site/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: "."
+          path: "_site"
 
       - name: Deploy to GitHub Pages
         id: deployment

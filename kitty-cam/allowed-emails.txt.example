@@ -1,0 +1,6 @@
+# Allowed email addresses — one per line
+# Only these Google accounts can access the kitty cam
+# Copy this file to allowed-emails.txt and add real addresses
+#
+# user@gmail.com
+# another@example.com
