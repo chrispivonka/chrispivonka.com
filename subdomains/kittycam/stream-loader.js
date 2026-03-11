@@ -1,6 +1,25 @@
 import STREAM_CONFIG from "./stream-config.js";
 
+const MAIN_SITE = "https://chrispivonka.com";
 const HLS_JS_CDN = "https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js";
+
+function rewriteNavLinks() {
+  const header = document.getElementById("header-placeholder");
+  if (!header) return;
+
+  const observer = new MutationObserver(() => {
+    const links = header.querySelectorAll("a.nav-link");
+    links.forEach((link) => {
+      const href = link.getAttribute("href");
+      if (href && !href.startsWith("http") && !href.startsWith("#")) {
+        link.setAttribute("href", `${MAIN_SITE}/${href}`);
+      }
+    });
+    if (links.length > 0) observer.disconnect();
+  });
+
+  observer.observe(header, { childList: true, subtree: true });
+}
 
 function createYouTubeEmbed(videoId, title) {
   const iframe = document.createElement("iframe");
@@ -125,7 +144,11 @@ function loadStream() {
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", loadStream);
+  document.addEventListener("DOMContentLoaded", () => {
+    rewriteNavLinks();
+    loadStream();
+  });
 } else {
+  rewriteNavLinks();
   loadStream();
 }
