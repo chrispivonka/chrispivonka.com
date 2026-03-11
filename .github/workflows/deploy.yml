@@ -48,7 +48,7 @@ jobs:
             --include "sitemap.xml" \
             --include "manifest.json" \
             --include ".well-known/*" \
-            --exclude "kitty-cam/*" \
+            --exclude "subdomains/*" \
             --delete
 
       - name: Invalidate CloudFront distribution
@@ -92,7 +92,7 @@ jobs:
         run: |
           mkdir -p _site
           rsync -a \
-            --exclude='kitty-cam/' \
+            --exclude='subdomains/' \
             --exclude='node_modules/' \
             --exclude='.git/' \
             --exclude='__tests__/' \
