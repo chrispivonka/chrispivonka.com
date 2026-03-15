@@ -348,7 +348,6 @@ Resources:
   AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: kittycam-auth-edge
       Runtime: nodejs20.x
       Handler: index.handler
       CodeUri: src/auth/
