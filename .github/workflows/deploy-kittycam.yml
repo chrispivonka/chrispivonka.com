@@ -23,6 +23,7 @@ jobs:
     name: Deploy Kitty-Cam Infrastructure & Content
     env:
       AWS_REGION: us-east-1
+      SECRETS_REGION: us-west-2
 
     steps:
       - uses: actions/checkout@v6
@@ -44,7 +45,7 @@ jobs:
 
       - name: Inject secrets into Lambda config
         working-directory: infra/kittycam
-        run: node buildspec.mjs
+        run: SECRETS_REGION=${{ env.SECRETS_REGION }} node buildspec.mjs
 
       - name: SAM build
         working-directory: infra/kittycam
@@ -56,7 +57,7 @@ jobs:
           # Read CSP stream origins — controls which domains the page can connect/embed
           ORIGINS=$(aws secretsmanager get-secret-value \
             --secret-id kittycam/stream-origins \
-            --region us-east-1 \
+            --region ${{ env.SECRETS_REGION }} \
             --query SecretString \
             --output text 2>/dev/null || echo '{}')
           CONNECT=$(echo "$ORIGINS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('connect_src', \"'self'\"))")

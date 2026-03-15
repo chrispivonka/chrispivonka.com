@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = join(__dirname, "src", "auth", "config.mjs");
-const REGION = process.env.AWS_REGION || "us-east-1";
+const REGION = process.env.SECRETS_REGION || process.env.AWS_REGION || "us-west-2";
 
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 
