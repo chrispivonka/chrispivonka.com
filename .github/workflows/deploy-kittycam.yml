@@ -1,0 +1,121 @@
+name: Deploy Kitty-Cam
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "subdomains/kittycam/**"
+      - "infra/kittycam/**"
+      - ".github/workflows/deploy-kittycam.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: kittycam-deployment
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC federation
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy Kitty-Cam Infrastructure & Content
+    env:
+      AWS_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.KITTYCAM_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Inject secrets into Lambda config
+        working-directory: infra/kittycam
+        run: node buildspec.mjs
+
+      - name: SAM build
+        working-directory: infra/kittycam
+        run: sam build
+
+      - name: Read stream origins from Secrets Manager
+        id: origins
+        run: |
+          # Read CSP stream origins — controls which domains the page can connect/embed
+          ORIGINS=$(aws secretsmanager get-secret-value \
+            --secret-id kittycam/stream-origins \
+            --region us-east-1 \
+            --query SecretString \
+            --output text 2>/dev/null || echo '{}')
+          CONNECT=$(echo "$ORIGINS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('connect_src', \"'self'\"))")
+          FRAME=$(echo "$ORIGINS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('frame_src', 'https://www.youtube.com https://www.youtube-nocookie.com'))")
+          echo "connect_src=$CONNECT" >> "$GITHUB_OUTPUT"
+          echo "frame_src=$FRAME" >> "$GITHUB_OUTPUT"
+
+      - name: SAM deploy
+        working-directory: infra/kittycam
+        run: |
+          sam deploy \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              HostedZoneId=${{ secrets.KITTYCAM_HOSTED_ZONE_ID }} \
+              AlertEmail=${{ secrets.KITTYCAM_ALERT_EMAIL }} \
+              "StreamConnectOrigins=${{ steps.origins.outputs.connect_src }}" \
+              "StreamFrameOrigins=${{ steps.origins.outputs.frame_src }}"
+
+      - name: Get stack outputs
+        id: stack
+        working-directory: infra/kittycam
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name kittycam \
+            --query "Stacks[0].Outputs[?OutputKey=='ContentBucketName'].OutputValue" \
+            --output text)
+          DIST_ID=$(aws cloudformation describe-stacks \
+            --stack-name kittycam \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
+            --output text)
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "distribution_id=$DIST_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Sync static content to S3
+        run: |
+          # Sync kitty-cam specific files
+          aws s3 sync subdomains/kittycam/ s3://${{ steps.stack.outputs.bucket }} \
+            --exclude "*" \
+            --include "kitty-cam.html" \
+            --include "stream-config.js" \
+            --include "stream-loader.js" \
+            --include "robots.txt" \
+            --delete
+
+          # Sync shared assets from main site
+          aws s3 sync css/ s3://${{ steps.stack.outputs.bucket }}/css/
+          aws s3 sync js/ s3://${{ steps.stack.outputs.bucket }}/js/
+          aws s3 sync assets/ s3://${{ steps.stack.outputs.bucket }}/assets/
+          aws s3 sync partials/ s3://${{ steps.stack.outputs.bucket }}/partials/
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.stack.outputs.distribution_id }} \
+            --paths "/*"
+
+      - name: Deployment summary
+        run: |
+          echo "Kitty-Cam deployed successfully!"
+          echo "URL: https://kittycam.chrispivonka.com"
+          echo "Bucket: ${{ steps.stack.outputs.bucket }}"
+          echo "Distribution: ${{ steps.stack.outputs.distribution_id }}"
