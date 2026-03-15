@@ -162,7 +162,7 @@ Resources:
     Type: AWS::CloudFront::OriginAccessControl
     Properties:
       OriginAccessControlConfig:
-        Name: !Sub "${DomainName}-oac"
+        Name: kittycam-oac
         Description: OAC for kitty-cam S3 origin
         OriginAccessControlOriginType: s3
         SigningBehavior: always
@@ -175,7 +175,7 @@ Resources:
     Type: AWS::CloudFront::ResponseHeadersPolicy
     Properties:
       ResponseHeadersPolicyConfig:
-        Name: !Sub "${DomainName}-security-headers"
+        Name: kittycam-security-headers
         SecurityHeadersConfig:
           StrictTransportSecurity:
             AccessControlMaxAgeSec: 63072000
@@ -232,7 +232,7 @@ Resources:
   WebACL:
     Type: AWS::WAFv2::WebACL
     Properties:
-      Name: !Sub "${DomainName}-waf"
+      Name: kittycam-waf
       Scope: CLOUDFRONT
       DefaultAction:
         Allow: {}
