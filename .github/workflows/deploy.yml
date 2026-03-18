@@ -54,7 +54,7 @@ jobs:
             --include "sitemap.xml" \
             --include "manifest.json" \
             --include ".well-known/*" \
-            --exclude "subdomains/*" \
+            --include "subdomains/**" \
             --delete
 
       - name: Invalidate CloudFront distribution
