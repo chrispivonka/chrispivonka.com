@@ -8,7 +8,7 @@
 async function loadPartials() {
   try {
     // Load header
-    const headerResponse = await fetch("partials/header.html");
+    const headerResponse = await fetch("/partials/header.html");
     if (headerResponse.ok) {
       const headerHtml = await headerResponse.text();
       const headerPlaceholder = document.getElementById("header-placeholder");
@@ -24,7 +24,7 @@ async function loadPartials() {
     }
 
     // Load footer
-    const footerResponse = await fetch("partials/footer.html");
+    const footerResponse = await fetch("/partials/footer.html");
     if (footerResponse.ok) {
       const footerHtml = await footerResponse.text();
       const footerPlaceholder = document.getElementById("footer-placeholder");
