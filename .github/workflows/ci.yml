@@ -151,7 +151,7 @@ jobs:
         continue-on-error: false
 
       - name: Comment PR with Lighthouse scores
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         if: github.event_name == 'pull_request'
         with:
           script: |
