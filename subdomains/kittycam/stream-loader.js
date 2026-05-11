@@ -23,7 +23,7 @@ function rewriteNavLinks() {
 
 function createYouTubeEmbed(videoId, title) {
   const iframe = document.createElement("iframe");
-  iframe.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}`;
+  iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
   iframe.title = title;
   iframe.setAttribute("frameborder", "0");
   iframe.allow =
