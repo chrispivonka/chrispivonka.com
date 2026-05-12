@@ -111,13 +111,25 @@ function showOfflineMessage() {
   container.appendChild(msg);
 }
 
-function loadStream() {
+async function fetchStreamUrl() {
+  try {
+    const res = await fetch("/stream.json");
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.url || null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadStream() {
   const container = document.getElementById("stream-container");
   if (!container) return;
 
-  const { type, url, title } = STREAM_CONFIG;
+  const { type, title } = STREAM_CONFIG;
+  const url = await fetchStreamUrl();
 
-  if (!url || url === "YOUR_VIDEO_ID") {
+  if (!url) {
     showOfflineMessage();
     return;
   }
