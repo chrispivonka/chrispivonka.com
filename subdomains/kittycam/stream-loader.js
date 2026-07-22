@@ -21,6 +21,23 @@ function rewriteNavLinks() {
   observer.observe(header, { childList: true, subtree: true });
 }
 
+function updateBadgeStatus(isLive = false) {
+  const badge = document.querySelector(".live-badge");
+  if (!badge) return;
+
+  if (isLive) {
+    badge.textContent = "LIVE";
+    badge.style.background = "rgba(63, 185, 80, 0.15)";
+    badge.style.color = "var(--green)";
+    badge.style.borderColor = "rgba(63, 185, 80, 0.3)";
+  } else {
+    badge.textContent = "OFFLINE";
+    badge.style.background = "rgba(248, 81, 73, 0.15)";
+    badge.style.color = "var(--red)";
+    badge.style.borderColor = "rgba(248, 81, 73, 0.3)";
+  }
+}
+
 function createYouTubeEmbed(videoId, title) {
   const iframe = document.createElement("iframe");
   iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}`;
@@ -54,6 +71,7 @@ function createHlsEmbed(streamUrl) {
 
   if (video.canPlayType("application/vnd.apple.mpegurl")) {
     video.src = streamUrl;
+    updateBadgeStatus(true);
   } else {
     const script = document.createElement("script");
     script.src = HLS_JS_CDN;
@@ -62,6 +80,7 @@ function createHlsEmbed(streamUrl) {
         const hls = new window.Hls();
         hls.loadSource(streamUrl);
         hls.attachMedia(video);
+        updateBadgeStatus(true);
         hls.on(window.Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
             showOfflineMessage();
@@ -90,25 +109,23 @@ function createIframeEmbed(url, title) {
   iframe.style.position = "absolute";
   iframe.style.top = "0";
   iframe.style.left = "0";
+  updateBadgeStatus(true);
   return iframe;
 }
 
 function showOfflineMessage() {
   const container = document.getElementById("stream-container");
   if (!container) return;
-  container.innerHTML = "";
-  const msg = document.createElement("div");
-  msg.className =
-    "d-flex align-items-center justify-content-center bg-dark text-white";
-  msg.style.position = "absolute";
-  msg.style.inset = "0";
-  msg.innerHTML = `
-    <div class="text-center p-4">
-      <i class="bi bi-camera-video-off" style="font-size: 3rem;"></i>
-      <p class="mt-3 mb-0">${STREAM_CONFIG.offlineMessage}</p>
+
+  updateBadgeStatus(false);
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 2rem; text-align: center; box-sizing: border-box;">
+      <i class="bi bi-camera-video-off" style="font-size: 3rem; color: var(--cyan); margin-bottom: 0.75rem; display: block;"></i>
+      <p style="margin: 0 0 0.5rem 0; font-size: 0.95rem; color: var(--text); font-weight: 500; font-family: var(--mono); text-align: center;">${STREAM_CONFIG.offlineMessage || "The stream is currently offline. Check back later!"}</p>
+      <span style="font-size: 0.72rem; color: var(--text-dim); font-family: var(--mono);">$ status // STANDBY (0 active streams)</span>
     </div>
   `;
-  container.appendChild(msg);
 }
 
 async function fetchStreamUrl() {
@@ -140,6 +157,7 @@ async function loadStream() {
   switch (type) {
     case "youtube":
       embed = createYouTubeEmbed(url, title);
+      updateBadgeStatus(true);
       break;
     case "hls":
       embed = createHlsEmbed(url);
