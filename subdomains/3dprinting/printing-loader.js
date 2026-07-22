@@ -15,7 +15,7 @@ async function fetchPrinterTelemetry() {
   }
 }
 
-function init3DCanvas(container, statusText = "STANDBY") {
+function init3DCanvas(container, statusText = "STANDBY", customMesh = null) {
   if (!container) return;
 
   if (canvasAnimationId) {
@@ -23,10 +23,12 @@ function init3DCanvas(container, statusText = "STANDBY") {
     canvasAnimationId = null;
   }
 
+  const modelLabel = customMesh && customMesh.name ? customMesh.name : "3D CAD Mesh Preview";
+
   container.innerHTML = `
     <canvas id="canvas3d" style="width:100%; height:100%; display:block; cursor:grab;"></canvas>
     <div style="position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:0.68rem; color:var(--text-muted); pointer-events:none; background:rgba(13,17,23,0.85); padding:4px 8px; border-radius:4px; border:1px solid var(--border);">
-      <i class="bi bi-arrows-move"></i> 3D CAD Mesh Preview (Drag to Rotate)
+      <i class="bi bi-box-seam" style="color: var(--cyan);"></i> ${modelLabel} (Drag to Rotate 360°)
     </div>
     <div style="position:absolute; top:12px; right:16px; font-family:var(--mono); font-size:0.68rem; color:${statusText === "PRINTING" ? "var(--green)" : "var(--purple)"}; background:rgba(188,140,255,0.1); border:1px solid rgba(188,140,255,0.25); padding:4px 8px; border-radius:4px;">
       ● BAMBU LAB: ${statusText}
@@ -41,16 +43,20 @@ function init3DCanvas(container, statusText = "STANDBY") {
   let width = (canvas.width = container.clientWidth);
   let height = (canvas.height = container.clientHeight);
 
-  const vertices = [
+  // Default box mesh fallback
+  const defaultVertices = [
     [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
     [-1, -1, 1],  [1, -1, 1],  [1, 1, 1],  [-1, 1, 1]
   ];
 
-  const edges = [
+  const defaultEdges = [
     [0, 1], [1, 2], [2, 3], [3, 0],
     [4, 5], [5, 6], [6, 7], [7, 4],
     [0, 4], [1, 5], [2, 6], [3, 7]
   ];
+
+  const vertices = customMesh && customMesh.vertices ? customMesh.vertices : defaultVertices;
+  const edges = customMesh && customMesh.edges ? customMesh.edges : defaultEdges;
 
   let rotX = 0.5, rotY = 0.5;
   let isDragging = false;
@@ -86,7 +92,7 @@ function init3DCanvas(container, statusText = "STANDBY") {
     let cosX = Math.cos(rotX), sinX = Math.sin(rotX);
     let y2 = y * cosX - z1 * sinX;
     let z2 = z1 * cosX + y * sinX;
-    const scale = 140 / (z2 + 4);
+    const scale = 130 / (z2 + 4);
     return [width / 2 + x1 * scale, height / 2 + y2 * scale];
   }
 
@@ -104,10 +110,12 @@ function init3DCanvas(container, statusText = "STANDBY") {
     ctx.lineWidth = 1.8;
 
     edges.forEach(([i, j]) => {
-      ctx.beginPath();
-      ctx.moveTo(projected[i][0], projected[i][1]);
-      ctx.lineTo(projected[j][0], projected[j][1]);
-      ctx.stroke();
+      if (projected[i] && projected[j]) {
+        ctx.beginPath();
+        ctx.moveTo(projected[i][0], projected[i][1]);
+        ctx.lineTo(projected[j][0], projected[j][1]);
+        ctx.stroke();
+      }
     });
 
     projected.forEach(([x, y]) => {
@@ -164,12 +172,13 @@ function renderSpecs(telemetry) {
 
   const temps = telemetry && telemetry.temps ? telemetry.temps : {};
   const activeStatus = telemetry && telemetry.status ? telemetry.status : PRINTING_CONFIG.status;
+  const cadModelName = telemetry && telemetry.modelName ? telemetry.modelName : "ESP32_Sensor_Housing.stl";
 
   const specsList = [
     { label: "status", value: activeStatus === "PRINTING" ? "PRINTING LIVE" : "STANDBY" },
+    { label: "active model", value: cadModelName },
     { label: "nozzle temp", value: temps.nozzle ? `${temps.nozzle} (target ${temps.nozzleTarget || "215°C"})` : "215°C" },
-    { label: "bed temp", value: temps.bed ? `${temps.bed} (target ${temps.bedTarget || "60°C"})` : "60°C" },
-    { label: "cad software", value: "Fusion 360 / OpenSCAD" }
+    { label: "bed temp", value: temps.bed ? `${temps.bed} (target ${temps.bedTarget || "60°C"})` : "60°C" }
   ];
 
   specsContainer.innerHTML = specsList.map(spec => `
@@ -196,6 +205,28 @@ function renderAmsSlots(telemetry) {
       </div>
     `;
   }).join("");
+}
+
+function renderPrintHistory(telemetry) {
+  const historyContainer = document.getElementById("print-history-table");
+  if (!historyContainer) return;
+
+  const history = (telemetry && telemetry.printHistory) || [
+    { id: "job-112", name: "ESP32_Environmental_Sensor_Housing.gcode", material: "PETG Charcoal", printTime: "1h 26m", filamentWeight: "38.4g", completedAt: "2026-07-21 18:40", status: "COMPLETED" },
+    { id: "job-111", name: "RPi4_DIN_Rail_Mount_Bracket.gcode", material: "PLA+ White", printTime: "48m", filamentWeight: "19.2g", completedAt: "2026-07-20 14:15", status: "COMPLETED" },
+    { id: "job-110", name: "MagicMirror_Corner_Bezel_TL.gcode", material: "ABS Black", printTime: "2h 12m", filamentWeight: "51.8g", completedAt: "2026-07-19 09:30", status: "COMPLETED" }
+  ];
+
+  historyContainer.innerHTML = history.map(item => `
+    <tr class="history-row">
+      <td class="h-name"><i class="bi bi-file-earmark-code" style="color: var(--cyan);"></i> ${item.name}</td>
+      <td class="h-mat">${item.material}</td>
+      <td class="h-time">${item.printTime}</td>
+      <td class="h-weight">${item.filamentWeight || "N/A"}</td>
+      <td class="h-date">${item.completedAt}</td>
+      <td class="h-status"><span class="h-badge">${item.status}</span></td>
+    </tr>
+  `).join("");
 }
 
 function renderProjects() {
@@ -229,13 +260,16 @@ async function updateTelemetryUI() {
   renderLiveJobCard(telemetry);
   renderSpecs(telemetry);
   renderAmsSlots(telemetry);
+  renderPrintHistory(telemetry);
+
+  const customMesh = telemetry && telemetry.meshData ? telemetry.meshData : null;
 
   if (telemetry && telemetry.status === "PRINTING" && telemetry.snapshotUrl) {
     viewportContainer.innerHTML = `<img src="${telemetry.snapshotUrl}" alt="Live Printer Camera Snapshot" style="width:100%; height:100%; object-fit:contain; background:#000;" />`;
   } else if (telemetry && telemetry.status === "PRINTING" && telemetry.streamUrl) {
     viewportContainer.innerHTML = `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`;
   } else {
-    init3DCanvas(viewportContainer, telemetry && telemetry.status ? telemetry.status : "STANDBY");
+    init3DCanvas(viewportContainer, telemetry && telemetry.status ? telemetry.status : "STANDBY", customMesh);
   }
 }
 
@@ -243,7 +277,6 @@ function init() {
   renderProjects();
   updateTelemetryUI();
 
-  // Poll live telemetry every 5 seconds
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(updateTelemetryUI, 5000);
 }

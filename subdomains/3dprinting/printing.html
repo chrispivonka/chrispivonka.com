@@ -269,6 +269,50 @@
       font-weight: 500;
     }
 
+    /* Print History Table */
+    .history-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      text-align: left;
+    }
+    .history-table th {
+      color: var(--text-muted);
+      font-weight: 500;
+      padding: 0.6rem 0.8rem;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .history-table td {
+      padding: 0.7rem 0.8rem;
+      border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+      color: var(--text);
+    }
+    .history-table tr:last-child td {
+      border-bottom: none;
+    }
+    .h-name { color: var(--text); font-weight: 500; }
+    .h-mat { color: var(--yellow); }
+    .h-time { color: var(--text-muted); }
+    .h-weight { color: var(--cyan); }
+    .h-date { color: var(--text-muted); }
+    .h-badge {
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      background: rgba(63, 185, 80, 0.1);
+      color: var(--green);
+      border: 1px solid rgba(63, 185, 80, 0.2);
+    }
+
     .section-title {
       font-family: var(--mono);
       font-size: 1rem;
@@ -382,7 +426,7 @@
     <div id="live-job-container" style="display: none;"></div>
 
     <div class="viewport-card" id="printing-container">
-      <!-- 3D Interactive Canvas / Stream / Snapshot rendered by printing-loader.js -->
+      <!-- 3D Interactive Canvas / CAD Mesh / Stream rendered by printing-loader.js -->
     </div>
 
     <div class="specs-grid" id="printing-specs">
@@ -397,6 +441,27 @@
         <!-- AMS slots rendered by printing-loader.js -->
       </div>
     </div>
+
+    <section>
+      <div class="section-title">// print-history-log (s3 telemetry archive)</div>
+      <div class="history-card">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>G-Code File / Job Name</th>
+              <th>Material</th>
+              <th>Duration</th>
+              <th>Filament</th>
+              <th>Completed</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="print-history-table">
+            <!-- Print history rows rendered by printing-loader.js -->
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <section>
       <div class="section-title">// cad-prototypes &amp; physical-hardware</div>
