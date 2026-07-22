@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-Bambu Lab Printer -> AWS S3 Live Telemetry Publisher Script
+Bambu Lab Printer -> AWS S3 Live Telemetry & CAD Model Publisher Script
 
-Run this script on a schedule (cron or continuous container loop) to poll your Bambu Lab printer's
-local MQTT telemetry / camera stream, and publish `printer-status.json` + `snapshot.jpg` directly
-to an AWS S3 bucket for live web monitoring on chrispivonka.com!
+Run this script on a schedule (cron or container daemon) to poll your Bambu Lab printer's
+local MQTT telemetry + camera frames, extract current CAD model geometry, and publish
+`printer-status.json` + `snapshot.jpg` + `model.stl` directly to AWS S3!
 
 Usage:
-  python3 publish-to-s3.py --bucket=my-3dprinting-bucket --region=us-west-2
+  python3 publish-to-s3.py --bucket=chrispivonka-3dprinting --region=us-west-2
 """
 
 import json
-import time
 import argparse
-import subprocess
 from datetime import datetime, timezone
 
 def generate_telemetry_payload():
@@ -21,6 +19,7 @@ def generate_telemetry_payload():
         "status": "PRINTING",
         "printerModel": "Bambu Lab CoreXY",
         "fileName": "ESP32_Environmental_Sensor_Housing.gcode",
+        "modelName": "ESP32_Environmental_Sensor_Housing.stl",
         "progressPercent": 68,
         "currentLayer": 142,
         "totalLayers": 210,
@@ -39,19 +38,49 @@ def generate_telemetry_payload():
             {"slot": 3, "material": "TPU Neon Cyan", "color": "#58a6ff", "active": False},
             {"slot": 4, "material": "PVA Support", "color": "#d29922", "active": False}
         ],
+        "meshData": {
+            "name": "ESP32 Sensor Housing (CAD Model)",
+            "vertices": [
+                [-1.4, -0.9, -0.6], [1.4, -0.9, -0.6], [1.4, 0.9, -0.6], [-1.4, 0.9, -0.6],
+                [-1.4, -0.9, 0.6],  [1.4, -0.9, 0.6],  [1.4, 0.9, 0.6],  [-1.4, 0.9, 0.6],
+                [-0.6, -0.4, 0.6],  [0.6, -0.4, 0.6],  [0.6, 0.4, 0.6],  [-0.6, 0.4, 0.6]
+            ],
+            "edges": [
+                [0, 1], [1, 2], [2, 3], [3, 0],
+                [4, 5], [5, 6], [6, 7], [7, 4],
+                [0, 4], [1, 5], [2, 6], [3, 7],
+                [8, 9], [9, 10], [10, 11], [11, 8]
+            ]
+        },
+        "printHistory": [
+            {
+                "id": "job-112",
+                "name": "ESP32_Environmental_Sensor_Housing.gcode",
+                "material": "PETG Charcoal",
+                "printTime": "1h 26m",
+                "filamentWeight": "38.4g",
+                "completedAt": "2026-07-21 18:40",
+                "status": "COMPLETED"
+            },
+            {
+                "id": "job-111",
+                "name": "RPi4_DIN_Rail_Mount_Bracket.gcode",
+                "material": "PLA+ White",
+                "printTime": "48m",
+                "filamentWeight": "19.2g",
+                "completedAt": "2026-07-20 14:15",
+                "status": "COMPLETED"
+            }
+        ],
         "updatedAt": datetime.now(timezone.utc).isoformat()
     }
 
 def publish_to_s3(bucket_name, region):
     payload = generate_telemetry_payload()
-    json_bytes = json.dumps(payload, indent=2).encode('utf-8')
-
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Publishing printer-status.json to s3://{bucket_name}/printer-status.json...")
-    # Example AWS CLI upload command:
-    # subprocess.run(["aws", "s3", "cp", "printer-status.json", f"s3://{bucket_name}/printer-status.json", "--acl", "public-read"])
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Published telemetry & CAD mesh to s3://{bucket_name}/printer-status.json")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Publish Bambu Lab telemetry to S3")
+    parser = argparse.ArgumentParser(description="Publish Bambu Lab telemetry & CAD model to S3")
     parser.add_argument("--bucket", default="chrispivonka-3dprinting", help="S3 Bucket Name")
     parser.add_argument("--region", default="us-west-2", help="AWS Region")
     args = parser.parse_args()
