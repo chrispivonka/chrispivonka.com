@@ -141,6 +141,26 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
   controls.dampingFactor = 0.05;
   currentControls = controls;
 
+  // Auto-rotation pause & inactivity resumption logic
+  let autoRotate = true;
+  let inactivityTimer = null;
+  const INACTIVITY_DELAY_MS = 5000; // Resumes auto-rotation after 5 seconds of idle
+
+  controls.addEventListener("start", () => {
+    autoRotate = false;
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = null;
+    }
+  });
+
+  controls.addEventListener("end", () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      autoRotate = true;
+    }, INACTIVITY_DELAY_MS);
+  });
+
   // Lighting
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
   scene.add(ambientLight);
@@ -226,7 +246,9 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
   // Animation Loop
   function animate() {
     animFrameId = requestAnimationFrame(animate);
-    modelGroup.rotation.y += 0.003;
+    if (autoRotate && modelGroup) {
+      modelGroup.rotation.y += 0.003;
+    }
     controls.update();
     renderer.render(scene, camera);
   }
@@ -387,7 +409,6 @@ function renderPrintHistory(telemetry) {
     </tr>
   `).join("");
 
-  // Attach click listener to load historical CAD models into 3D viewport
   const rows = historyContainer.querySelectorAll(".history-row");
   rows.forEach(row => {
     row.addEventListener("click", async () => {
