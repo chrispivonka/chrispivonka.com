@@ -333,6 +333,69 @@
         </div>
         <div class="project-link" style="color: var(--text-muted); font-size: 0.72rem; cursor: default;"><i class="bi bi-shield-lock-fill"></i> unlisted_route // auth_required</div>
       </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-status project-status-secondary"><span class="status-dot"></span> ACTIVE IoT</div>
+        </div>
+        <h3 class="project-title">Smart Magic Mirror</h3>
+        <p class="project-desc">Custom Raspberry Pi-powered smart mirror display. Real-time weather integration, calendar synchronization, transit updates, and automated display power management via a lightweight web dashboard.</p>
+        <div class="project-code"><span class="c">// config/mirror.config.js — module layout</span>
+<span class="f">module</span>.<span class="f">exports</span> <span class="b">=</span> {
+  <span class="p">modules</span>: [<span class="s">"clock"</span>, <span class="s">"weather"</span>, <span class="s">"calendar"</span>, <span class="s">"transit"</span>],
+  <span class="p">motionSensor</span>: <span class="k">true</span>,
+  <span class="p">displayTimeout</span>: <span class="n">300</span>
+};</div>
+        <div class="project-pills">
+          <span class="tech-pill">Raspberry Pi</span>
+          <span class="tech-pill">Node.js</span>
+          <span class="tech-pill">Electron</span>
+          <span class="tech-pill">REST APIs</span>
+          <span class="tech-pill">IoT</span>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-status project-status-secondary"><span class="status-dot"></span> PRODUCTION</div>
+        </div>
+        <h3 class="project-title">Custom Wedding Platform</h3>
+        <p class="project-desc">Full-stack web application built for our wedding. Real-time guest RSVP management, interactive schedule, venue details, photo gallery integration, and automated confirmation emails.</p>
+        <div class="project-code"><span class="c">// api/rsvp.js — serverless RSVP submission</span>
+<span class="f">exports</span>.handler <span class="b">=</span> <span class="k">async</span> (event) <span class="b">=></span> {
+  <span class="k">const</span> { guestId, attending, count } <span class="b">=</span> <span class="t">JSON</span>.<span class="f">parse</span>(event.body);
+  <span class="k">await</span> db.<span class="f">updateRSVP</span>({ guestId, attending, count });
+  <span class="k">await</span> email.<span class="f">sendConfirmation</span>(guestId);
+  <span class="k">return</span> { statusCode: <span class="n">200</span>, body: <span class="t">JSON</span>.<span class="f">stringify</span>({ status: <span class="s">"confirmed"</span> }) };
+};</div>
+        <div class="project-pills">
+          <span class="tech-pill">HTML5 / CSS3</span>
+          <span class="tech-pill">Node.js</span>
+          <span class="tech-pill">AWS Lambda</span>
+          <span class="tech-pill">DynamoDB</span>
+          <span class="tech-pill">SES</span>
+        </div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-status"><span class="status-dot"></span> IN LABS</div>
+        </div>
+        <h3 class="project-title">3D Printing &amp; Physical Computing</h3>
+        <p class="project-desc">Custom CAD modeling, enclosure design, and micro-controller hardware integration. Rapid prototyping custom physical parts and micro-electronic sensor enclosures (project details TBD).</p>
+        <div class="project-code"><span class="c">// hardware/sensor.ino — micro-controller driver</span>
+<span class="k">void</span> <span class="f">setup</span>() {
+  Serial.<span class="f">begin</span>(<span class="n">115200</span>);
+  pinMode(LED_BUILTIN, OUTPUT);
+  <span class="c">// sensor hardware init TBD</span>
+}</div>
+        <div class="project-pills">
+          <span class="tech-pill">CAD / Fusion 360</span>
+          <span class="tech-pill">3D Printing</span>
+          <span class="tech-pill">ESP32 / C++</span>
+          <span class="tech-pill">Physical Computing</span>
+        </div>
+      </div>
     </div>
   </section>
 
