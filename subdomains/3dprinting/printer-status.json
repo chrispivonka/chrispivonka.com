@@ -1,0 +1,26 @@
+{
+  "status": "PRINTING",
+  "printerModel": "Bambu Lab CoreXY",
+  "fileName": "ESP32_Environmental_Sensor_Housing.gcode",
+  "progressPercent": 68,
+  "currentLayer": 142,
+  "totalLayers": 210,
+  "timeRemaining": "28m 14s",
+  "timeElapsed": "58m 42s",
+  "temps": {
+    "nozzle": "215°C",
+    "nozzleTarget": "215°C",
+    "bed": "60°C",
+    "bedTarget": "60°C",
+    "chamber": "38°C"
+  },
+  "ams": [
+    { "slot": 1, "material": "PLA+ White", "color": "#ffffff", "active": false },
+    { "slot": 2, "material": "PETG Charcoal", "color": "#333333", "active": true },
+    { "slot": 3, "material": "TPU Neon Cyan", "color": "#58a6ff", "active": false },
+    { "slot": 4, "material": "PVA Support", "color": "#d29922", "active": false }
+  ],
+  "snapshotUrl": null,
+  "streamUrl": null,
+  "updatedAt": "2026-07-21T20:49:00Z"
+}

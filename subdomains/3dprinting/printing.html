@@ -11,7 +11,7 @@
   <link rel="icon" href="/assets/favicon.ico" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
 
   <style>
@@ -92,7 +92,7 @@
       padding: 2rem 1.5rem;
       display: flex;
       flex-direction: column;
-      gap: 2rem;
+      gap: 1.75rem;
     }
 
     .header-card {
@@ -120,24 +120,58 @@
       color: var(--text-muted);
       margin-top: 0.25rem;
     }
-    .status-pill {
-      font-family: var(--mono);
-      font-size: 0.72rem;
-      padding: 0.25rem 0.65rem;
-      border-radius: 999px;
-      background: rgba(188, 140, 255, 0.1);
-      color: var(--purple);
-      border: 1px solid rgba(188, 140, 255, 0.25);
+
+    .live-job-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(63, 185, 80, 0.4);
+      box-shadow: 0 0 16px rgba(63, 185, 80, 0.1);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+    }
+    .job-header {
       display: flex;
       align-items: center;
-      gap: 0.4rem;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 0.82rem;
     }
-    .status-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--purple);
-      box-shadow: 0 0 8px var(--purple);
+    .job-title {
+      color: var(--text);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .job-percent {
+      color: var(--green);
+      font-weight: 600;
+    }
+    .progress-track {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      height: 10px;
+      overflow: hidden;
+      width: 100%;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--cyan), var(--green));
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+    .job-stats-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
 
     .viewport-card {
@@ -211,6 +245,15 @@
       gap: 0.6rem;
       font-family: var(--mono);
       font-size: 0.75rem;
+      transition: all 0.2s;
+    }
+    .ams-slot.active-slot {
+      border-color: var(--green);
+      background: rgba(63, 185, 80, 0.08);
+      box-shadow: 0 0 8px rgba(63, 185, 80, 0.2);
+    }
+    .ams-slot.active-slot .ams-slot-num {
+      color: var(--green);
     }
     .ams-color-dot {
       width: 12px;
@@ -315,7 +358,7 @@
       <span>3dprinting.chrispivonka.com</span>
     </div>
     <div class="status-right">
-      <span>● BAMBU LAB COREXY</span>
+      <span id="live-poll-badge">● S3 LIVE POLL</span>
     </div>
   </header>
 
@@ -333,13 +376,13 @@
         <h1><i class="bi bi-printer"></i> Bambu Lab 3D Printing &amp; Hardware Lab</h1>
         <p>Real-Time Telemetry, Stream Ingestion &amp; CAD Fabrication.</p>
       </div>
-      <div class="status-pill">
-        <span class="status-dot"></span> IN LABS
-      </div>
     </div>
 
+    <!-- Active Print Job Progress Bar (Rendered dynamically when status === PRINTING) -->
+    <div id="live-job-container" style="display: none;"></div>
+
     <div class="viewport-card" id="printing-container">
-      <!-- 3D Interactive Canvas / Stream rendered by printing-loader.js -->
+      <!-- 3D Interactive Canvas / Stream / Snapshot rendered by printing-loader.js -->
     </div>
 
     <div class="specs-grid" id="printing-specs">
