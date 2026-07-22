@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
-import { TwoMFLoader as ThreeMFLoader } from "three/addons/loaders/3MFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import PRINTING_CONFIG from "./printing-config.js";
 
@@ -38,7 +37,7 @@ function cleanupThreeScene() {
   currentScene = null;
 }
 
-function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
+async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
   cleanupThreeScene();
   if (!container) return;
 
@@ -93,6 +92,7 @@ function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
 
   if (is3MF) {
     try {
+      const { ThreeMFLoader } = await import("three/addons/loaders/3MFLoader.js");
       const loader = new ThreeMFLoader();
       const object = loader.parse(arrayBuffer);
       modelGroup = object;
@@ -104,10 +104,12 @@ function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
         }
       });
     } catch (err) {
-      console.warn("Could not parse 3MF file:", err);
+      console.warn("Could not parse 3MF file with ThreeMFLoader:", err);
+      // Fallback message if 3MF structure is complex
+      container.innerHTML += `<div style="position:absolute; top:40px; left:16px; font-family:var(--mono); font-size:0.7rem; color:var(--yellow);">⚠️ 3MF preview fallback — drag an .stl file for direct rendering.</div>`;
     }
   } else {
-    // STL Fallback
+    // STL Loader (Fast & 100% Reliable)
     const loader = new STLLoader();
     const geometry = loader.parse(arrayBuffer);
     geometry.computeVertexNormals();
@@ -176,7 +178,7 @@ async function loadSampleModel(container, modelUrl = "./output.stl", fileName = 
     const res = await fetch(modelUrl);
     if (!res.ok) throw new Error("Failed to fetch model");
     const buffer = await res.arrayBuffer();
-    render3DArrayBuffer(container, buffer, fileName);
+    await render3DArrayBuffer(container, buffer, fileName);
   } catch (err) {
     console.warn("Could not load sample model:", err);
   }
@@ -368,7 +370,7 @@ async function updateTelemetryUI() {
   } else if (!currentScene) {
     const modelUrl = (telemetry && telemetry.modelUrl) ? telemetry.modelUrl : "./output.stl";
     const modelName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
-    loadSampleModel(viewportContainer, modelUrl, modelName);
+    await loadSampleModel(viewportContainer, modelUrl, modelName);
   }
 }
 
