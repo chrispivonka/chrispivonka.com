@@ -1,7 +1,13 @@
+import * as THREE from "three";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import PRINTING_CONFIG from "./printing-config.js";
 
 let pollTimer = null;
-let canvasAnimationId = null;
+let currentScene = null;
+let currentRenderer = null;
+let currentControls = null;
+let animFrameId = null;
 
 async function fetchPrinterTelemetry() {
   try {
@@ -15,120 +21,162 @@ async function fetchPrinterTelemetry() {
   }
 }
 
-function init3DCanvas(container, statusText = "STANDBY", customMesh = null) {
+function cleanupThreeScene() {
+  if (animFrameId) {
+    cancelAnimationFrame(animFrameId);
+    animFrameId = null;
+  }
+  if (currentControls) {
+    currentControls.dispose();
+    currentControls = null;
+  }
+  if (currentRenderer) {
+    currentRenderer.dispose();
+    currentRenderer = null;
+  }
+  currentScene = null;
+}
+
+function renderSTLArrayBuffer(container, arrayBuffer, fileName = "Local STL File") {
+  cleanupThreeScene();
   if (!container) return;
 
-  if (canvasAnimationId) {
-    cancelAnimationFrame(canvasAnimationId);
-    canvasAnimationId = null;
-  }
-
-  const modelLabel = customMesh && customMesh.name ? customMesh.name : "3D CAD Mesh Preview";
-
   container.innerHTML = `
-    <canvas id="canvas3d" style="width:100%; height:100%; display:block; cursor:grab;"></canvas>
-    <div style="position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:0.68rem; color:var(--text-muted); pointer-events:none; background:rgba(13,17,23,0.85); padding:4px 8px; border-radius:4px; border:1px solid var(--border);">
-      <i class="bi bi-box-seam" style="color: var(--cyan);"></i> ${modelLabel} (Drag to Rotate 360°)
-    </div>
-    <div style="position:absolute; top:12px; right:16px; font-family:var(--mono); font-size:0.68rem; color:${statusText === "PRINTING" ? "var(--green)" : "var(--purple)"}; background:rgba(188,140,255,0.1); border:1px solid rgba(188,140,255,0.25); padding:4px 8px; border-radius:4px;">
-      ● BAMBU LAB: ${statusText}
+    <div id="threejs-viewport" style="width:100%; height:100%; position:relative;"></div>
+    <div style="position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:0.68rem; color:var(--text); background:rgba(13,17,23,0.85); padding:6px 10px; border-radius:4px; border:1px solid var(--cyan); display:flex; align-items:center; gap:0.6rem; z-index:10;">
+      <i class="bi bi-box-seam" style="color:var(--cyan);"></i>
+      <span>STL: <strong>${fileName}</strong></span>
+      <button id="toggle-wireframe-btn" style="background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); padding:2px 6px; border-radius:3px; cursor:pointer; font-size:0.65rem;">Toggle Wireframe</button>
+      <label for="stl-file-input" style="background:var(--cyan); color:#000; border:none; padding:2px 8px; border-radius:3px; cursor:pointer; font-weight:600; font-size:0.65rem;">Load Local STL File...</label>
     </div>
   `;
 
-  const canvas = document.getElementById("canvas3d");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  const viewport = document.getElementById("threejs-viewport");
+  const width = container.clientWidth;
+  const height = container.clientHeight;
 
-  let width = (canvas.width = container.clientWidth);
-  let height = (canvas.height = container.clientHeight);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x161b22);
+  currentScene = scene;
 
-  // Default box mesh fallback
-  const defaultVertices = [
-    [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
-    [-1, -1, 1],  [1, -1, 1],  [1, 1, 1],  [-1, 1, 1]
-  ];
+  const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+  camera.position.set(0, 0, 100);
 
-  const defaultEdges = [
-    [0, 1], [1, 2], [2, 3], [3, 0],
-    [4, 5], [5, 6], [6, 7], [7, 4],
-    [0, 4], [1, 5], [2, 6], [3, 7]
-  ];
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  viewport.appendChild(renderer.domElement);
+  currentRenderer = renderer;
 
-  const vertices = customMesh && customMesh.vertices ? customMesh.vertices : defaultVertices;
-  const edges = customMesh && customMesh.edges ? customMesh.edges : defaultEdges;
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  currentControls = controls;
 
-  let rotX = 0.5, rotY = 0.5;
-  let isDragging = false;
-  let lastMouseX = 0, lastMouseY = 0;
+  // Ambient & Directional Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
 
-  canvas.addEventListener("mousedown", (e) => {
-    isDragging = true;
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-    canvas.style.cursor = "grabbing";
+  const dirLight1 = new THREE.DirectionalLight(0x58a6ff, 1.2);
+  dirLight1.position.set(100, 100, 100);
+  scene.add(dirLight1);
+
+  const dirLight2 = new THREE.DirectionalLight(0xbc8cff, 0.8);
+  dirLight2.position.set(-100, -100, -50);
+  scene.add(dirLight2);
+
+  // Parse STL Geometry
+  const loader = new STLLoader();
+  const geometry = loader.parse(arrayBuffer);
+  geometry.computeVertexNormals();
+  geometry.center();
+
+  // Compute bounding sphere for auto camera distance
+  geometry.computeBoundingSphere();
+  const radius = geometry.boundingSphere ? geometry.boundingSphere.radius : 40;
+  camera.position.set(0, radius * 1.5, radius * 2.2);
+  camera.lookAt(0, 0, 0);
+
+  // Metallic Mesh Material
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x58a6ff,
+    roughness: 0.3,
+    metalness: 0.4,
+    wireframe: false
   });
 
-  window.addEventListener("mouseup", () => {
-    isDragging = false;
-    canvas.style.cursor = "grab";
-  });
+  const mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
 
-  window.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - lastMouseX;
-    const dy = e.clientY - lastMouseY;
-    rotY += dx * 0.01;
-    rotX += dy * 0.01;
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-  });
-
-  function project(vertex) {
-    let [x, y, z] = vertex;
-    let cosY = Math.cos(rotY), sinY = Math.sin(rotY);
-    let x1 = x * cosY - z * sinY;
-    let z1 = z * cosY + x * sinY;
-    let cosX = Math.cos(rotX), sinX = Math.sin(rotX);
-    let y2 = y * cosX - z1 * sinX;
-    let z2 = z1 * cosX + y * sinX;
-    const scale = 130 / (z2 + 4);
-    return [width / 2 + x1 * scale, height / 2 + y2 * scale];
+  // Wireframe toggle button handler
+  const toggleBtn = document.getElementById("toggle-wireframe-btn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      material.wireframe = !material.wireframe;
+      toggleBtn.textContent = material.wireframe ? "Solid View" : "Toggle Wireframe";
+    });
   }
 
-  function render() {
-    ctx.clearRect(0, 0, width, height);
+  // Animation Loop
+  function animate() {
+    animFrameId = requestAnimationFrame(animate);
+    mesh.rotation.y += 0.003;
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
 
-    if (!isDragging) {
-      rotY += 0.005;
-      rotX += 0.002;
-    }
+  // Window Resize
+  const onResize = () => {
+    if (!container || container.clientWidth === 0) return;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  };
+  window.addEventListener("resize", onResize);
+}
 
-    const projected = vertices.map(project);
+async function loadSampleSTL(container, stlUrl = "./sample-box.stl", fileName = "sample-box.stl") {
+  try {
+    const res = await fetch(stlUrl);
+    if (!res.ok) throw new Error("Failed to fetch STL");
+    const buffer = await res.arrayBuffer();
+    renderSTLArrayBuffer(container, buffer, fileName);
+  } catch (err) {
+    console.warn("Could not load sample STL, falling back to 3D canvas:", err);
+  }
+}
 
-    ctx.strokeStyle = statusText === "PRINTING" ? "#3fb950" : "#bc8cff";
-    ctx.lineWidth = 1.8;
+function setupDragAndDrop(container) {
+  if (!container) return;
 
-    edges.forEach(([i, j]) => {
-      if (projected[i] && projected[j]) {
-        ctx.beginPath();
-        ctx.moveTo(projected[i][0], projected[i][1]);
-        ctx.lineTo(projected[j][0], projected[j][1]);
-        ctx.stroke();
+  container.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    container.style.outline = "2px dashed var(--cyan)";
+  });
+
+  container.addEventListener("dragleave", () => {
+    container.style.outline = "none";
+  });
+
+  container.addEventListener("drop", (e) => {
+    e.preventDefault();
+    container.style.outline = "none";
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (file.name.toLowerCase().endsWith(".stl") || file.name.toLowerCase().endsWith(".3mf")) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          renderSTLArrayBuffer(container, event.target.result, file.name);
+        };
+        reader.readAsArrayBuffer(file);
       }
-    });
-
-    projected.forEach(([x, y]) => {
-      ctx.fillStyle = "#58a6ff";
-      ctx.beginPath();
-      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    canvasAnimationId = requestAnimationFrame(render);
-  }
-
-  render();
+    }
+  });
 }
 
 function renderLiveJobCard(telemetry) {
@@ -172,7 +220,7 @@ function renderSpecs(telemetry) {
 
   const temps = telemetry && telemetry.temps ? telemetry.temps : {};
   const activeStatus = telemetry && telemetry.status ? telemetry.status : PRINTING_CONFIG.status;
-  const cadModelName = telemetry && telemetry.modelName ? telemetry.modelName : "ESP32_Sensor_Housing.stl";
+  const cadModelName = telemetry && telemetry.modelName ? telemetry.modelName : "sample-box.stl";
 
   const specsList = [
     { label: "status", value: activeStatus === "PRINTING" ? "PRINTING LIVE" : "STANDBY" },
@@ -246,6 +294,23 @@ function renderProjects() {
   `).join("");
 }
 
+function setupFileInputHandler(container) {
+  const fileInput = document.getElementById("stl-file-input");
+  if (!fileInput) return;
+
+  fileInput.addEventListener("change", (e) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        renderSTLArrayBuffer(container, evt.target.result, file.name);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  });
+}
+
 async function updateTelemetryUI() {
   const viewportContainer = document.getElementById("printing-container");
   const pollBadge = document.getElementById("live-poll-badge");
@@ -262,18 +327,22 @@ async function updateTelemetryUI() {
   renderAmsSlots(telemetry);
   renderPrintHistory(telemetry);
 
-  const customMesh = telemetry && telemetry.meshData ? telemetry.meshData : null;
-
   if (telemetry && telemetry.status === "PRINTING" && telemetry.snapshotUrl) {
     viewportContainer.innerHTML = `<img src="${telemetry.snapshotUrl}" alt="Live Printer Camera Snapshot" style="width:100%; height:100%; object-fit:contain; background:#000;" />`;
   } else if (telemetry && telemetry.status === "PRINTING" && telemetry.streamUrl) {
     viewportContainer.innerHTML = `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`;
-  } else {
-    init3DCanvas(viewportContainer, telemetry && telemetry.status ? telemetry.status : "STANDBY", customMesh);
+  } else if (!currentScene) {
+    const stlUrl = (telemetry && telemetry.stlUrl) ? telemetry.stlUrl : "./sample-box.stl";
+    const stlName = (telemetry && telemetry.modelName) ? telemetry.modelName : "sample-box.stl";
+    loadSampleSTL(viewportContainer, stlUrl, stlName);
   }
 }
 
 function init() {
+  const viewportContainer = document.getElementById("printing-container");
+  setupDragAndDrop(viewportContainer);
+  setupFileInputHandler(viewportContainer);
+
   renderProjects();
   updateTelemetryUI();
 
