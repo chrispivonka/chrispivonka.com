@@ -922,11 +922,28 @@ async function initLiveStats() {
       }).join("");
     }
 
-    // ── update footer: keep version, append short sha ──
+    // ── fetch latest release tag for semver ──
+    let semverTag = "v2.0.0";
+    try {
+      const tagRes = await fetch(
+        "https://api.github.com/repos/chrispivonka/chrispivonka.com/releases/latest",
+        { signal: controller.signal, headers: { Accept: "application/vnd.github.v3+json" } }
+      );
+      if (tagRes.ok) {
+        const releaseData = await tagRes.json();
+        if (releaseData && releaseData.tag_name) {
+          semverTag = releaseData.tag_name;
+        }
+      }
+    } catch {
+      /* fallback semver tag */
+    }
+
+    // ── update footer: semver version + short commit sha ──
     const footerHash = document.getElementById("footer-commit-hash");
     if (footerHash && commits[0]) {
       const short = commits[0].sha.slice(0, 7);
-      footerHash.textContent = `v2.0.0 \u00b7 ${short}`;
+      footerHash.textContent = `${semverTag} \u00b7 ${short}`;
       if (commits[0].html_url) {
         footerHash.href = commits[0].html_url;
       }
