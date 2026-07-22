@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="3D Printing & Physical Computing — Chris Pivonka" />
+  <meta name="author" content="Chris Pivonka" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>3D Printing &amp; Labs · chrispivonka.com</title>
+
+  <link rel="icon" href="/assets/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg:           #0d1117;
+      --bg-card:      #161b22;
+      --bg-elevated:  #1c2128;
+      --border:       #30363d;
+      --border-bright:#444c56;
+      --text:         #e6edf3;
+      --text-muted:   #8b949e;
+      --text-dim:     #484f58;
+      --cyan:         #58a6ff;
+      --green:        #3fb950;
+      --yellow:       #d29922;
+      --purple:       #bc8cff;
+      --red:          #f85149;
+      --mono:         'JetBrains Mono', 'Fira Code', monospace;
+      --sans:         'Inter', system-ui, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .status-bar {
+      background: #1f6feb;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      padding: 0 1rem;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      letter-spacing: 0.02em;
+      flex-shrink: 0;
+    }
+    .status-bar a { color: inherit; text-decoration: none; opacity: 0.85; }
+    .status-bar a:hover { opacity: 1; }
+    .status-left { display: flex; align-items: center; gap: 0.6rem; }
+    .status-right { display: flex; align-items: center; gap: 0.6rem; }
+
+    .site-nav {
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      padding: 0.6rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
+    .nav-brand {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .nav-brand:hover { color: var(--cyan); }
+    .nav-sep { color: var(--border-bright); font-size: 0.9rem; }
+    .nav-current { font-family: var(--mono); font-size: 0.8rem; color: var(--text); }
+
+    .page-main {
+      flex: 1;
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .header-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .header-title h1 {
+      font-family: var(--mono);
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .header-title p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .status-pill {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(188, 140, 255, 0.1);
+      color: var(--purple);
+      border: 1px solid rgba(188, 140, 255, 0.25);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--purple);
+      box-shadow: 0 0 8px var(--purple);
+    }
+
+    .viewport-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .offline-placeholder {
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .specs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .spec-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .spec-label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .spec-val {
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      color: var(--cyan);
+    }
+
+    .site-footer {
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      padding: 1rem 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .site-footer a { color: var(--text-muted); text-decoration: none; }
+    .site-footer a:hover { color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+  <header class="status-bar">
+    <div class="status-left">
+      <span>chrispivonka.com</span>
+      <span class="status-separator">│</span>
+      <span>3dprinting.chrispivonka.com</span>
+    </div>
+    <div class="status-right">
+      <span>● LAB STANDBY</span>
+    </div>
+  </header>
+
+  <nav class="site-nav">
+    <a href="https://chrispivonka.com" class="nav-brand">
+      <i class="bi bi-arrow-left"></i> chrispivonka.com
+    </a>
+    <span class="nav-sep">/</span>
+    <span class="nav-current">3d-printing</span>
+  </nav>
+
+  <main class="page-main">
+    <div class="header-card">
+      <div class="header-title">
+        <h1><i class="bi bi-printer"></i> 3D Printing &amp; Hardware Lab</h1>
+        <p>Custom CAD design, micro-controllers, and additive manufacturing prototypes.</p>
+      </div>
+      <div class="status-pill">
+        <span class="status-dot"></span> IN LABS
+      </div>
+    </div>
+
+    <div class="viewport-card" id="printing-container">
+      <!-- Dynamically populated by printing-loader.js -->
+    </div>
+
+    <div class="specs-grid" id="printing-specs">
+      <!-- Specs rendered by printing-loader.js -->
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <span>© 2026 Chris Pivonka</span>
+    <a href="https://github.com/chrispivonka/chrispivonka.com" target="_blank" rel="noopener">v2.0.0</a>
+  </footer>
+
+  <script type="module" src="./printing-loader.js"></script>
+</body>
+</html>
