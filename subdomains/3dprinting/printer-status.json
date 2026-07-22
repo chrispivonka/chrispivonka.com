@@ -2,7 +2,8 @@
   "status": "PRINTING",
   "printerModel": "Bambu Lab CoreXY",
   "fileName": "ESP32_Environmental_Sensor_Housing.gcode",
-  "modelName": "ESP32_Environmental_Sensor_Housing.stl",
+  "modelName": "output.stl",
+  "modelUrl": "./output.stl",
   "progressPercent": 68,
   "currentLayer": 142,
   "totalLayers": 210,
@@ -21,24 +22,12 @@
     { "slot": 3, "material": "TPU Neon Cyan", "color": "#58a6ff", "active": false },
     { "slot": 4, "material": "PVA Support", "color": "#d29922", "active": false }
   ],
-  "meshData": {
-    "name": "ESP32 Sensor Housing (CAD Model)",
-    "vertices": [
-      [-1.4, -0.9, -0.6], [1.4, -0.9, -0.6], [1.4, 0.9, -0.6], [-1.4, 0.9, -0.6],
-      [-1.4, -0.9, 0.6],  [1.4, -0.9, 0.6],  [1.4, 0.9, 0.6],  [-1.4, 0.9, 0.6],
-      [-0.6, -0.4, 0.6],  [0.6, -0.4, 0.6],  [0.6, 0.4, 0.6],  [-0.6, 0.4, 0.6]
-    ],
-    "edges": [
-      [0, 1], [1, 2], [2, 3], [3, 0],
-      [4, 5], [5, 6], [6, 7], [7, 4],
-      [0, 4], [1, 5], [2, 6], [3, 7],
-      [8, 9], [9, 10], [10, 11], [11, 8]
-    ]
-  },
   "printHistory": [
     {
       "id": "job-112",
       "name": "ESP32_Environmental_Sensor_Housing.gcode",
+      "modelName": "output.stl",
+      "modelUrl": "./output.stl",
       "material": "PETG Charcoal",
       "printTime": "1h 26m",
       "filamentWeight": "38.4g",
@@ -48,6 +37,8 @@
     {
       "id": "job-111",
       "name": "RPi4_DIN_Rail_Mount_Bracket.gcode",
+      "modelName": "sample-box.stl",
+      "modelUrl": "./sample-box.stl",
       "material": "PLA+ White",
       "printTime": "48m",
       "filamentWeight": "19.2g",
@@ -57,6 +48,8 @@
     {
       "id": "job-110",
       "name": "MagicMirror_Corner_Bezel_TL.gcode",
+      "modelName": "output.stl",
+      "modelUrl": "./output.stl",
       "material": "ABS Black",
       "printTime": "2h 12m",
       "filamentWeight": "51.8g",
@@ -66,6 +59,8 @@
     {
       "id": "job-109",
       "name": "Voron_Stealthburner_Duct_v2.gcode",
+      "modelName": "sample-box.stl",
+      "modelUrl": "./sample-box.stl",
       "material": "ABS Neon Red",
       "printTime": "3h 05m",
       "filamentWeight": "74.0g",
@@ -75,5 +70,5 @@
   ],
   "snapshotUrl": null,
   "streamUrl": null,
-  "updatedAt": "2026-07-21T20:54:00Z"
+  "updatedAt": "2026-07-21T21:08:00Z"
 }

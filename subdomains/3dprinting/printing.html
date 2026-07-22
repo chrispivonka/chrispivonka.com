@@ -322,6 +322,25 @@
       color: var(--green);
       border: 1px solid rgba(63, 185, 80, 0.2);
     }
+    .history-row {
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .history-row:hover {
+      background: var(--bg-elevated);
+    }
+    .history-row.active-history-row td {
+      background: rgba(88, 166, 255, 0.08);
+      border-bottom-color: var(--cyan);
+    }
+    .view-model-btn {
+      transition: all 0.2s ease;
+    }
+    .view-model-btn:hover {
+      background: var(--cyan) !important;
+      color: #000 !important;
+      border-color: var(--cyan) !important;
+    }
 
     .section-title {
       font-family: var(--mono);
@@ -487,6 +506,6 @@
   </footer>
 
   <input type="file" id="stl-file-input" accept=".stl,.3mf" style="display:none;" />
-  <script type="module" src="./printing-loader.js?v=2.0.4"></script>
+  <script type="module" src="./printing-loader.js?v=2.0.5"></script>
 </body>
 </html>
