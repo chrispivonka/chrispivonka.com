@@ -273,7 +273,7 @@
         </div>
         <div class="about-metrics">
           <div class="metric"><div class="metric-value">12</div><div class="metric-label">years.exp</div></div>
-          <div class="metric"><div class="metric-value">M+</div><div class="metric-label">users.served</div></div>
+          <div class="metric"><div class="metric-value">10M+</div><div class="metric-label">users.served</div></div>
           <div class="metric"><div class="metric-value">24/7</div><div class="metric-label">uptime.sla</div></div>
           <div class="metric"><div class="metric-value">∞</div><div class="metric-label">coffee.consumed</div></div>
         </div>
@@ -311,26 +311,27 @@
 
       <div class="project-card">
         <div class="project-header">
-          <div class="project-status"><span class="status-dot"></span> ARCHITECTURE</div>
+          <div class="project-status project-status-purple"><span class="status-dot"></span> AUTHENTICATED STREAM</div>
         </div>
-        <h3 class="project-title">Low-Latency Edge Media Delivery</h3>
-        <p class="project-desc">Secure, low-latency live media distribution architecture on AWS. CloudFront CDN edge caching with Lambda@Edge request interception, token verification, and automated IaC deployments.</p>
-        <div class="project-code"><span class="c">// edge/auth.js — Lambda@Edge viewer-request interceptor</span>
+        <h3 class="project-title">Serverless KittyCam Live Streaming</h3>
+        <p class="project-desc">Authenticated, low-latency live media streaming architecture built on AWS. CloudFront CDN edge caching with Lambda@Edge request interception, token verification, and automated IaC deployments.</p>
+        <div class="project-code"><span class="c">// edge/auth-interceptor.js — Lambda@Edge viewer request auth</span>
 <span class="f">exports</span>.handler <span class="b">=</span> <span class="k">async</span> (event) <span class="b">=></span> {
   <span class="k">const</span> request = event.Records[<span class="n">0</span>].cf.request;
-  <span class="k">const</span> token = request.headers[<span class="s">'x-auth-token'</span>]?.[<span class="n">0</span>]?.value;
+  <span class="k">const</span> token   = request.headers[<span class="s">'x-auth-token'</span>]?.[<span class="n">0</span>]?.value;
   <span class="k">if</span> (!token || !<span class="f">verifySignature</span>(token)) {
-    <span class="k">return</span> { status: <span class="s">'403'</span>, statusDescription: <span class="s">'Forbidden'</span> };
+    <span class="k">return</span> { status: <span class="s">'401'</span>, statusDescription: <span class="s">'Unauthorized'</span> };
   }
   <span class="k">return</span> request;
 };</div>
         <div class="project-pills">
           <span class="tech-pill">AWS CloudFront</span>
           <span class="tech-pill">Lambda@Edge</span>
-          <span class="tech-pill">Node.js</span>
           <span class="tech-pill">OAuth2 / JWT</span>
+          <span class="tech-pill">HLS Video</span>
           <span class="tech-pill">CloudFormation</span>
         </div>
+        <div class="project-link" style="color: var(--text-muted); font-size: 0.72rem; cursor: default;"><i class="bi bi-shield-lock-fill"></i> unlisted_route // auth_required</div>
       </div>
     </div>
   </section>
