@@ -951,6 +951,10 @@ async function initLiveStats() {
       statusDot.style.background = "var(--yellow)";
       statusDot.style.boxShadow  = "0 0 6px rgba(210,153,34,0.7)";
     }
+    const footerHash = document.getElementById("footer-commit-hash");
+    if (footerHash) {
+      footerHash.textContent = "v2.0.0 \u00b7 main";
+    }
   }
 }
 
