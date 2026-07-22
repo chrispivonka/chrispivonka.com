@@ -1,28 +1,34 @@
 /**
  * 3D Printing & Physical Computing Subdomain Config
  *
- * Configuration for live printer camera stream, OctoPrint / Moonraker telemetry,
- * and project prototype status feeds.
+ * Support for:
+ *   1. Bambu Lab RTSP -> Container (go2rtc / MediaMTX) -> YouTube Live / HLS
+ *   2. S3 bucket / JSON telemetry polling (/printer-status.json)
  */
 const PRINTING_CONFIG = {
-  title: "3D Printing & Physical Computing Lab",
-  subtitle: "Custom CAD, Micro-controllers & Prototype Fabrication",
-  printerName: "Bambu / Voron CoreXY",
-  status: "STANDBY", // STANDBY, PRINTING, OFFLINE
-  offlineMessage: "3D printer stream & telemetry feed are currently offline. Check back during active print jobs!",
+  title: "Bambu Lab 3D Printing & Hardware Lab",
+  subtitle: "Real-Time Telemetry, Stream Ingestion & CAD Fabrication",
+  printerName: "Bambu Lab CoreXY",
+  streamMode: "youtube", // "youtube", "hls", "s3_snapshot", "3d_canvas"
+  telemetryUrl: "/printer-status.json", // S3 bucket endpoint or gateway API
+  offlineMessage: "Bambu Lab printer stream is currently offline. Active print jobs will stream live!",
+  bambuStats: {
+    printerModel: "Bambu Lab CoreXY",
+    firmware: "Bambu OS / RTSP Relay Container",
+    amsLoaded: true,
+    amsSlots: [
+      { slot: 1, material: "PLA+ White", color: "#ffffff" },
+      { slot: 2, material: "PETG Charcoal", color: "#333333" },
+      { slot: 3, material: "TPU Neon Cyan", color: "#58a6ff" },
+      { slot: 4, material: "PVA Support", color: "#d29922" }
+    ]
+  },
   specs: [
-    { label: "firmware", value: "Klipper / Moonraker" },
+    { label: "printer", value: "Bambu Lab CoreXY" },
+    { label: "stream pipeline", value: "Bambu RTSP → Container → YouTube Live / S3" },
     { label: "cad software", value: "Fusion 360 / OpenSCAD" },
-    { label: "materials", value: "PETG, PLA+, TPU, ABS" },
     { label: "mcus", value: "ESP32 / STM32 / Raspberry Pi" }
   ],
-  telemetry: {
-    extruderTemp: "210°C / 210°C",
-    bedTemp: "60°C / 60°C",
-    fanSpeed: "100%",
-    speedFactor: "100%",
-    activeFilament: "PETG Charcoal Grey (1.75mm)"
-  },
   projects: [
     {
       id: "esp32-sensor-case",

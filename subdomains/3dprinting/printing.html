@@ -179,6 +179,53 @@
       color: var(--cyan);
     }
 
+    .ams-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .ams-title {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .ams-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+    }
+    .ams-slot {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+    }
+    .ams-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ams-slot-num {
+      color: var(--text-muted);
+    }
+    .ams-mat-name {
+      color: var(--text);
+      font-weight: 500;
+    }
+
     .section-title {
       font-family: var(--mono);
       font-size: 1rem;
@@ -268,7 +315,7 @@
       <span>3dprinting.chrispivonka.com</span>
     </div>
     <div class="status-right">
-      <span>● LAB STANDBY</span>
+      <span>● BAMBU LAB COREXY</span>
     </div>
   </header>
 
@@ -283,8 +330,8 @@
   <main class="page-main">
     <div class="header-card">
       <div class="header-title">
-        <h1><i class="bi bi-printer"></i> 3D Printing &amp; Hardware Lab</h1>
-        <p>Custom CAD design, micro-controllers, and additive manufacturing prototypes.</p>
+        <h1><i class="bi bi-printer"></i> Bambu Lab 3D Printing &amp; Hardware Lab</h1>
+        <p>Real-Time Telemetry, Stream Ingestion &amp; CAD Fabrication.</p>
       </div>
       <div class="status-pill">
         <span class="status-dot"></span> IN LABS
@@ -292,11 +339,20 @@
     </div>
 
     <div class="viewport-card" id="printing-container">
-      <!-- 3D Interactive Canvas rendered by printing-loader.js -->
+      <!-- 3D Interactive Canvas / Stream rendered by printing-loader.js -->
     </div>
 
     <div class="specs-grid" id="printing-specs">
       <!-- Specs rendered by printing-loader.js -->
+    </div>
+
+    <div class="ams-bar">
+      <div class="ams-title">
+        <i class="bi bi-layers-half" style="color: var(--cyan);"></i> Bambu AMS (Automatic Material System) Filament Unit
+      </div>
+      <div class="ams-grid" id="ams-slots">
+        <!-- AMS slots rendered by printing-loader.js -->
+      </div>
     </div>
 
     <section>
