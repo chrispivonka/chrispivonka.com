@@ -24,6 +24,12 @@ describe("Common Scripts (scripts.js)", () => {
     mockDarkModeToggle = {
       id: "darkModeToggle",
       addEventListener: jest.fn(),
+      querySelector: jest.fn(() => ({
+        classList: {
+          add: jest.fn(),
+          remove: jest.fn(),
+        },
+      })),
     };
 
     mockHtml = {
@@ -65,16 +71,45 @@ describe("Common Scripts (scripts.js)", () => {
     const originalScrollTo = window.scrollTo;
     const originalMatchMedia = window.matchMedia;
 
+    // Mock Cyber CLI and Canvas elements
+    const mockCliInput = {
+      id: "cliInput",
+      value: "",
+      addEventListener: jest.fn(),
+    };
+    const mockCliBody = {
+      id: "cliBody",
+      appendChild: jest.fn(),
+      scrollTop: 0,
+      scrollHeight: 100,
+      innerHTML: "",
+    };
+    const mockHudLoad = { id: "hud-load", textContent: "" };
+    const mockHudMem = { id: "hud-mem", textContent: "" };
+    const mockHudLatency = { id: "hud-latency", textContent: "" };
+    const mockCmdChip = {
+      className: "cmd-chip",
+      getAttribute: jest.fn((attr) => (attr === "data-cmd" ? "cat bio.json" : null)),
+      textContent: "> cat bio.json",
+      addEventListener: jest.fn(),
+    };
+
     // Override document methods
     document.getElementById = jest.fn((id) => {
       if (id === "backToTopBtn") return mockBackToTopBtn;
       if (id === "darkModeToggle") return mockDarkModeToggle;
       if (id === "navbar") return mockNavbar;
+      if (id === "cliInput") return mockCliInput;
+      if (id === "cliBody") return mockCliBody;
+      if (id === "hud-load") return mockHudLoad;
+      if (id === "hud-mem") return mockHudMem;
+      if (id === "hud-latency") return mockHudLatency;
       return null;
     });
 
     document.querySelectorAll = jest.fn((selector) => {
       if (selector === "[data-partial]") return mockPartialLinks;
+      if (selector === ".cmd-chip") return [mockCmdChip];
       return [];
     });
 
@@ -82,10 +117,30 @@ describe("Common Scripts (scripts.js)", () => {
 
     document.addEventListener = jest.fn();
 
+    document.body.appendChild = jest.fn();
+
     document.createElement = jest.fn((tag) => ({
       className: "",
       innerHTML: "",
+      setAttribute: jest.fn(),
+      getAttribute: jest.fn(),
       addEventListener: jest.fn(),
+      getContext: jest.fn(() => ({
+        clearRect: jest.fn(),
+        beginPath: jest.fn(),
+        arc: jest.fn(),
+        fill: jest.fn(),
+        moveTo: jest.fn(),
+        lineTo: jest.fn(),
+        stroke: jest.fn(),
+        fillRect: jest.fn(),
+        fillText: jest.fn(),
+      })),
+      classList: {
+        add: jest.fn(),
+        remove: jest.fn(),
+        contains: jest.fn(() => false),
+      },
     }));
 
     // Override window methods
@@ -1750,5 +1805,115 @@ describe("Common Scripts (scripts.js)", () => {
       expect(mockNavCollapse.classList.toggle).toHaveBeenCalledWith("show");
       expect(mockToggler.setAttribute).toHaveBeenCalledWith("aria-expanded", "true");
     });
+
+    it("should initialize interactive CLI shell and process typed commands", () => {
+      initializeScripts();
+
+      const input = document.getElementById("cliInput");
+      const body = document.getElementById("cliBody");
+
+      expect(input.addEventListener).toHaveBeenCalledWith("keydown", expect.any(Function));
+
+      const keydownHandler = input.addEventListener.mock.calls.find((call) => call[0] === "keydown")[1];
+
+      // Test enter key command execution
+      ["help", "matrix", "ping", "neofetch", "ls skills", "cat bio.json", "sudo hire", "unknowncmd", ""].forEach((cmd) => {
+        input.value = cmd;
+        keydownHandler({ key: "Enter" });
+      });
+      expect(body.appendChild).toHaveBeenCalled();
+
+      input.value = "clear";
+      keydownHandler({ key: "Enter" });
+      expect(body.innerHTML).toBe("");
+    });
+
+    it("should initialize mode switcher and topology nodes", () => {
+      const mockModeTab = {
+        classList: { remove: jest.fn(), add: jest.fn() },
+        getAttribute: jest.fn((attr) => (attr === "data-mode" ? "topology" : null)),
+        addEventListener: jest.fn(),
+      };
+      const mockViewMonitoring = { getAttribute: jest.fn(() => "view-monitoring"), style: { display: "block" } };
+      const mockViewTopology = { getAttribute: jest.fn(() => "view-topology"), style: { display: "none" } };
+
+      const mockTopoNode = {
+        classList: { remove: jest.fn(), add: jest.fn() },
+        getAttribute: jest.fn((attr) => (attr === "data-node" ? "edge" : null)),
+        addEventListener: jest.fn(),
+      };
+      const mockDetailTitle = { id: "nodeDetailTitle", textContent: "" };
+      const mockDetailDesc = { id: "nodeDetailDesc", textContent: "" };
+      const mockDetailCode = { id: "nodeDetailCode", textContent: "" };
+
+      document.querySelectorAll = jest.fn((selector) => {
+        if (selector === ".mode-tab") return [mockModeTab];
+        if (selector === ".mode-view") return [mockViewMonitoring, mockViewTopology];
+        if (selector === ".topo-node") return [mockTopoNode];
+        return [];
+      });
+
+      document.getElementById = jest.fn((id) => {
+        if (id === "nodeDetailTitle") return mockDetailTitle;
+        if (id === "nodeDetailDesc") return mockDetailDesc;
+        if (id === "nodeDetailCode") return mockDetailCode;
+        return null;
+      });
+
+      initializeScripts();
+
+      expect(mockModeTab.addEventListener).toHaveBeenCalledWith("click", expect.any(Function));
+      expect(mockTopoNode.addEventListener).toHaveBeenCalledWith("click", expect.any(Function));
+
+      // Simulate mode tab click
+      const modeClickHandler = mockModeTab.addEventListener.mock.calls[0][1];
+      modeClickHandler();
+      expect(mockViewTopology.style.display).toBe("block");
+
+      // Simulate topo node click
+      const nodeClickHandler = mockTopoNode.addEventListener.mock.calls[0][1];
+      nodeClickHandler();
+      expect(mockDetailTitle.textContent).toContain("Edge CDN");
+    });
+
+    it("should initialize audio SFX toggle and handle playCyberBeep", () => {
+      const mockIcon = { className: "" };
+      const mockAudioToggle = {
+        id: "audioToggle",
+        querySelector: jest.fn(() => mockIcon),
+        setAttribute: jest.fn(),
+        addEventListener: jest.fn(),
+      };
+
+      document.getElementById = jest.fn((id) => {
+        if (id === "audioToggle") return mockAudioToggle;
+        return null;
+      });
+
+      initializeScripts();
+
+      expect(mockAudioToggle.addEventListener).toHaveBeenCalledWith("click", expect.any(Function));
+      const toggleHandler = mockAudioToggle.addEventListener.mock.calls[0][1];
+      
+      // Toggle ON
+      toggleHandler();
+      // Toggle OFF
+      toggleHandler();
+
+      if (typeof window.playCyberBeep === "function") {
+        window.playCyberBeep(800, 0.05);
+      }
+
+      // Simulate document click event
+      const docClickHandler = document.addEventListener.mock.calls.find((call) => call[0] === "click")?.[1];
+      if (docClickHandler) {
+        docClickHandler({ target: { closest: jest.fn(() => true) } });
+        docClickHandler({ target: { closest: jest.fn(() => false) } });
+      }
+    });
   });
 });
+
+
+
+

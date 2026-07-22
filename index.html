@@ -1,129 +1,543 @@
 <!doctype html>
+<!-- 
+  hey, view-source? respect. most people don't bother.
+  source: https://github.com/chrispivonka/chrispivonka.com
+  
+  since you're here: try the konami code on the main page.
+  ↑↑↓↓←→←→BA — you know what to do.
+-->
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, shrink-to-fit=no"
-    />
-    <meta
-      name="description"
-      content="Chris Pivonka - Software Engineer specializing in full-stack web development"
-    />
-    <meta name="author" content="Chris Pivonka" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://chrispivonka.com; connect-src 'self' https://674lumu19j.execute-api.us-west-2.amazonaws.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
-    />
-    <meta
-      http-equiv="Permissions-Policy"
-      content="geolocation=(), microphone=(), camera=()"
-    />
-    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Chris Pivonka - Software Engineer" />
-    <meta
-      property="og:description"
-      content="Personal portfolio showcasing full-stack web development projects"
-    />
-    <meta property="og:url" content="https://chrispivonka.com" />
-    <meta
-      property="og:image"
-      content="https://chrispivonka.com/assets/profile.png"
-    />
-    <title>Index - chrispivonka.com</title>
-    <!-- Favicon-->
-    <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
-    <!-- Web App Manifest-->
-    <link rel="manifest" href="manifest.json" />
-    <!-- Custom Google font-->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@100;200;300;400;500;600;700;800;900&amp;display=swap"
-      rel="stylesheet"
-    />
-    <!-- Bootstrap icons-->
-    <link
-      href="assets/bootstrap-icons/font/bootstrap-icons.css"
-      rel="stylesheet"
-    />
-    <!-- Core theme CSS -->
-    <link href="css/styles.css" rel="stylesheet" />
-  </head>
-  <body class="d-flex flex-column min-vh-100">
-    <main class="flex-shrink-0">
-      <!-- Header placeholder -->
-      <div id="header-placeholder"></div>
-      <!-- Header-->
-      <header class="py-5">
-        <div class="container px-5 pb-0">
-          <div class="row gx-3 align-items-center">
-            <div class="col-xxl-5">
-              <!-- Header text content-->
-              <div class="text-center text-xxl-start">
-                <div
-                  class="badge bg-gradient-primary-to-secondary text-white mb-4"
-                >
-                  <div class="text-uppercase">
-                    Software engineer, tech enthusiast, nerd. <(^_^)>
-                  </div>
-                </div>
-                <h1 class="display-3 fw-bolder mb-5">
-                  <span class="text-gradient d-inline"> Hi, I'm Chris</span>
-                </h1>
-                <p class="text-muted">
-                  I'm a software engineer originally from the greater Chicago
-                  area. Now living in the Denver area, I'm passionate about
-                  music, photography, and technology. I'm motivated by the
-                  prospect of building software that helps people and really
-                  makes a difference. With experience in both frontend and
-                  backend development, I enjoy working on projects that
-                  challenge me to always continue to learn and grow as a
-                  developer.
-                </p>
-              </div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Chris Pivonka — Software Engineer. Building high-scale distributed systems, cloud infrastructure, and production services at Fandango. Denver, CO.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://chrispivonka.com; connect-src 'self' https://674lumu19j.execute-api.us-west-2.amazonaws.com https://api.github.com; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests">
+  <meta property="og:title" content="Chris Pivonka — Software Engineer">
+  <meta property="og:description" content="Building high-scale distributed systems at Fandango. Denver, CO.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://chrispivonka.com">
+  <title>Chris Pivonka — Software Engineer</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/bootstrap-icons/font/bootstrap-icons.css">
+  <!-- Critical CSS: applied before styles.css parses to prevent FOUC -->
+  <style>
+    /* Prevent white flash while dark stylesheet loads */
+    html, body { background: #0d1117; }
+    /* Keep code block invisible until animation fires */
+    .hero-code-block { opacity: 0; }
+    /* Force code lines to block immediately — prevents span FOUC where
+       all lines run inline before styles.css is parsed.
+       NOTE: .code-body intentionally omitted — its inactive panels have
+       style="display:none" which must not be overridden here. */
+    .code-line { display: block; }
+  </style>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="assets/favicon.ico">
+</head>
+<body>
+  <canvas id="constellation-canvas"></canvas>
+
+  <!-- ⌘K Command Palette -->
+  <div class="cmd-palette-overlay" id="cmdPaletteOverlay" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="cmd-palette" id="cmdPalette">
+      <div class="cmd-palette-input-wrap">
+        <i class="bi bi-search cmd-palette-icon"></i>
+        <input class="cmd-palette-input" id="cmdPaletteInput" type="text" placeholder="Type a command or search..." autocomplete="off" spellcheck="false">
+        <span class="cmd-palette-hint">ESC</span>
+      </div>
+      <div class="cmd-palette-results" id="cmdPaletteResults">
+        <div class="cmd-palette-section">Navigate</div>
+        <div class="cmd-result" data-action="scroll" data-target="#about" tabindex="0">
+          <i class="bi bi-person cmd-result-icon"></i>
+          <span class="cmd-result-label">about() — whoami</span>
+          <span class="cmd-result-shortcut">↵</span>
+        </div>
+        <div class="cmd-result" data-action="scroll" data-target="#projects" tabindex="0">
+          <i class="bi bi-diagram-3 cmd-result-icon"></i>
+          <span class="cmd-result-label">projects() — active deployments</span>
+        </div>
+        <div class="cmd-result" data-action="scroll" data-target="#experience" tabindex="0">
+          <i class="bi bi-clock-history cmd-result-icon"></i>
+          <span class="cmd-result-label">changelog() — git log</span>
+        </div>
+        <div class="cmd-result" data-action="scroll" data-target="#stack" tabindex="0">
+          <i class="bi bi-boxes cmd-result-icon"></i>
+          <span class="cmd-result-label">dependencies() — tech stack</span>
+        </div>
+        <div class="cmd-result" data-action="scroll" data-target="#contact" tabindex="0">
+          <i class="bi bi-terminal cmd-result-icon"></i>
+          <span class="cmd-result-label">ping() — get in touch</span>
+        </div>
+        <div class="cmd-palette-section">Links</div>
+        <div class="cmd-result" data-action="link" data-href="https://github.com/chrispivonka" tabindex="0">
+          <i class="bi bi-github cmd-result-icon"></i>
+          <span class="cmd-result-label">Open GitHub</span>
+          <span class="cmd-result-shortcut">↗</span>
+        </div>
+        <div class="cmd-result" data-action="link" data-href="https://linkedin.com/in/chrispivonka" tabindex="0">
+          <i class="bi bi-linkedin cmd-result-icon"></i>
+          <span class="cmd-result-label">Open LinkedIn</span>
+          <span class="cmd-result-shortcut">↗</span>
+        </div>
+        <div class="cmd-result" data-action="mailto" data-href="mailto:chris@chrispivonka.com" tabindex="0">
+          <i class="bi bi-envelope cmd-result-icon"></i>
+          <span class="cmd-result-label">Send Email</span>
+        </div>
+      </div>
+      <div class="cmd-palette-footer">
+        <span><span class="cmd-key">↑↓</span> navigate</span>
+        <span><span class="cmd-key">↵</span> select</span>
+        <span><span class="cmd-key">esc</span> close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <header class="status-bar">
+    <div class="status-bar-inner">
+      <div class="status-left">
+        <span class="status-dot"></span>
+        <span>chrispivonka.com</span>
+        <span class="status-separator">│</span>
+        <span class="status-uptime" id="uptime-counter">uptime: calculating...</span>
+      </div>
+      <div class="status-center">● ALL SYSTEMS OPERATIONAL</div>
+      <div class="status-right">
+        <span id="live-clock">--:--:-- MST</span>
+        <span class="status-separator">│</span>
+        <span>Denver, CO</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-comment"><span class="c-dim">/**</span></div>
+      <div class="hero-comment"><span class="c-dim"> * </span><span class="c-green">@author</span>&nbsp;&nbsp; Chris Pivonka</div>
+      <div class="hero-comment"><span class="c-dim"> * </span><span class="c-green">@location</span> Denver, CO</div>
+      <div class="hero-comment"><span class="c-dim"> * </span><span class="c-green">@role</span>&nbsp;&nbsp;&nbsp;&nbsp; Senior Software Engineer / Tech Lead</div>
+      <div class="hero-comment"><span class="c-dim"> */</span></div>
+
+      <h1 class="hero-title">Chris <span class="gradient-text">Pivonka</span></h1>
+      <p class="hero-role">$ Senior Software Engineer<span class="cursor"></span></p>
+
+      <!-- VS Code-style tabbed editor -->
+      <div class="hero-code-block">
+
+        <!-- Editor pane (tabs + code) -->
+        <div class="code-editor-pane">
+          <div class="code-tabs">
+            <div class="code-traffic">
+              <span class="t-red"></span>
+              <span class="t-yellow"></span>
+              <span class="t-green"></span>
             </div>
-            <div class="col-xxl-7">
-              <!-- Header profile picture-->
-              <div class="d-flex justify-content-center mt-2 mt-xxl-0">
-                <div class="profile bg-gradient-primary-to-secondary">
-                  <!-- TIP: For best results, use a photo with a transparent background like the demo example below-->
-                  <!-- Watch a tutorial on how to do this on YouTube (link)-->
-                  <img
-                    class="profile-img"
-                    src="assets/profile.png"
-                    alt="Chris Pivonka profile picture"
-                    loading="lazy"
-                  />
-                </div>
-              </div>
+            <div class="code-tab active" data-tab="config">
+              <span class="code-tab-dot"></span>
+              chris.config.ts
+              <span class="code-tab-close">×</span>
             </div>
+            <div class="code-tab" data-tab="work">work.ts</div>
+            <div class="code-tab" data-tab="readme">README.md</div>
+            <div class="code-tab" data-tab="gitlog">git.log</div>
+          </div>
+
+          <!-- Tab: chris.config.ts -->
+          <div class="code-body" id="tab-config">
+            <span class="code-line"><span class="k">const</span> <span class="f">chris</span><span class="b">: </span><span class="t">Engineer</span><span class="b"> = {</span></span>
+            <span class="code-line">  <span class="p">company</span><span class="b">:  </span><span class="s">"Fandango"</span><span class="b">,</span></span>
+            <span class="code-line">  <span class="p">role</span><span class="b">:     </span><span class="s">"Sr. Software Engineer / Tech Lead"</span><span class="b">,</span></span>
+            <span class="code-line">  <span class="p">stack</span><span class="b">:    [</span><span class="s">"C#/.NET"</span><span class="b">, </span><span class="s">"Node.js"</span><span class="b">, </span><span class="s">"Python"</span><span class="b">, </span><span class="s">"AWS"</span><span class="b">, </span><span class="s">"Redis"</span><span class="b">],</span></span>
+            <span class="code-line">  <span class="p">focus</span><span class="b">:    [</span><span class="s">"backend microservices"</span><span class="b">, </span><span class="s">"cloud infra"</span><span class="b">, </span><span class="s">"SRE"</span><span class="b">],</span></span>
+            <span class="code-line">  <span class="p">dayToDay</span><span class="b">: [</span></span>
+            <span class="code-line">    <span class="s">"architecting high-scale ticketing microservices"</span><span class="b">,</span></span>
+            <span class="code-line">    <span class="s">"leading Agile team alignment &amp; backend architecture"</span><span class="b">,</span></span>
+            <span class="code-line">    <span class="s">"optimizing Redis cache &amp; database query latency"</span><span class="b">,</span></span>
+            <span class="code-line">    <span class="s">"building DevSecOps CI/CD &amp; SRE observability"</span><span class="b">,</span></span>
+            <span class="code-line">    <span class="s">"mentoring engineers across seniority levels"</span><span class="b">,</span></span>
+            <span class="code-line">  <span class="b">],</span></span>
+            <span class="code-line">  <span class="p">location</span><span class="b">: </span><span class="s">"Denver, CO"</span><span class="b">,</span></span>
+            <span class="code-line">  <span class="p">yoe</span><span class="b">:      </span><span class="n">12</span><span class="b">,</span></span>
+            <span class="code-line">  <span class="p">coffee</span><span class="b">:   </span><span class="t">Infinity</span><span class="b">,</span></span>
+            <span class="code-line"><span class="b">};</span></span>
+          </div>
+
+          <!-- Tab: work.ts -->
+          <div class="code-body" id="tab-work" style="display:none">
+            <span class="code-line"><span class="k">interface</span> <span class="t">DayInTheLife</span><span class="b"> {</span></span>
+            <span class="code-line">  <span class="p">morning</span><span class="b">:    </span><span class="s">"sprint alignment &amp; cross-functional architecture reviews"</span><span class="b">;</span></span>
+            <span class="code-line">  <span class="p">core</span><span class="b">:       </span><span class="s">"high-scale backend microservices (C#, Node.js, Python)"</span><span class="b">;</span></span>
+            <span class="code-line">  <span class="p">data</span><span class="b">:       </span><span class="s">"Redis cache-aside, PostgreSQL &amp; DynamoDB latency tuning"</span><span class="b">;</span></span>
+            <span class="code-line">  <span class="p">infra</span><span class="b">:      </span><span class="s">"AWS cloud infrastructure, DevSecOps &amp; automated CI/CD"</span><span class="b">;</span></span>
+            <span class="code-line">  <span class="p">sre</span><span class="b">:        </span><span class="s">"observability dashboards, CloudWatch alerts &amp; MTTR reduction"</span><span class="b">;</span></span>
+            <span class="code-line">  <span class="p">mentorship</span><span class="b">: </span><span class="s">"coaching engineers across levels &amp; unblocking teams"</span><span class="b">;</span></span>
+            <span class="code-line"><span class="b">}</span></span>
+          </div>
+
+          <!-- Tab: README.md -->
+          <div class="code-body code-readme" id="tab-readme" style="display:none">
+            <span class="code-line"><span class="md-h1"># Chris Pivonka</span></span>
+            <span class="code-line"></span>
+            <span class="code-line"><span class="md-quote">&gt; Senior Software Engineer · Tech Lead · Denver, CO · 12 years</span></span>
+            <span class="code-line"></span>
+            <span class="code-line"><span class="md-h2">## Quick Start</span></span>
+            <span class="code-line"></span>
+            <span class="code-line"><span class="c">$ git clone https://github.com/chrispivonka</span></span>
+            <span class="code-line"><span class="c">$ cd career &amp;&amp; ./hire.sh --urgency=high</span></span>
+            <span class="code-line"></span>
+            <span class="code-line"><span class="md-h2">## About</span></span>
+            <span class="code-line"></span>
+            <span class="code-line"><span class="md-text">Builds things that scale. Occasionally breaks prod</span></span>
+            <span class="code-line"><span class="md-text">(everyone does — they're lying if they say otherwise).</span></span>
+            <span class="code-line"></span>
+            <span class="code-line"><span class="md-h2">## Badges</span></span>
+            <span class="code-line"></span>
+            <span class="code-line"><span class="md-badge-green">[TESTS: 196 PASSING]</span> <span class="md-badge-cyan">[UPTIME: 99.9%]</span> <span class="md-badge-purple">[COFFEE: ∞]</span></span>
+          </div>
+
+          <!-- Tab: git.log (placeholder — replaced with real commits by initLiveStats) -->
+          <div class="code-body" id="tab-gitlog" style="display:none">
+            <span class="code-line"><span class="git-hash">loading</span> <span class="git-msg">fetching real commits…</span></span>
           </div>
         </div>
-      </header>
-    </main>
-    <!-- Back to top button -->
-    <button
-      id="backToTopBtn"
-      class="back-to-top"
-      type="button"
-      aria-label="Back to top"
-    >
-      <i class="bi bi-arrow-up"></i>
-    </button>
-    <!-- Footer placeholder -->
-    <div id="footer-placeholder"></div>
-    <!-- Bootstrap core JS (deferred)-->
-    <script
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-QWTrJ+DtHUVHc7qk7TiMVadPvHXBeqJ6nfbbVfM7KxVrVzRiYupKcNU+rLCombLi"
-      crossorigin="anonymous"
-      defer
-    ></script>
-    <!-- Core theme JS -->
-    <script type="module" src="js/scripts.js"></script>
-  </body>
+
+        <!-- Terminal panel — always visible, pinned below the editor -->
+        <div class="code-terminal" id="tab-terminal">
+          <div class="terminal-titlebar">
+            <span class="terminal-shell-label">⌌ bash — chrispivonka.com</span>
+            <span class="terminal-titlebar-stats">
+              <span class="term-stat" id="term-perf"></span>
+              <span class="term-stat" id="term-conn"></span>
+            </span>
+          </div>
+          <div class="terminal-output" id="cliBody">
+            <div class="term-line"><span class="term-welcome">chrispivonka.com</span> <span class="term-dim">v2.0.0 — type <span class="term-cmd">help</span> for commands</span></div>
+          </div>
+          <div class="terminal-input-row">
+            <span class="term-prompt">guest@chrispivonka.com</span><span class="term-dim">:</span><span class="term-path">~</span><span class="term-dim">$</span>
+            <input class="terminal-input" id="cliInput" type="text" autocomplete="off" spellcheck="false" placeholder="type a command..." aria-label="Terminal input">
+          </div>
+        </div>
+
+      </div>
+
+      <div class="cmdK-hint" id="openCmdK">
+        <span class="key-badge">⌘</span>
+        <span class="key-badge">K</span>
+        <span>command palette</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Floating Navigation Panel (draggable) -->
+  <div class="floating-nav" id="floatingNav" role="navigation" aria-label="Site navigation">
+    <div class="floating-nav-header" id="floatingNavDrag" title="Drag to move">
+      <div class="fn-traffic">
+        <span class="t-red"  id="floatingNavClose" title="Minimise" tabindex="0" role="button" aria-label="Minimise navigation"></span>
+        <span class="t-yellow"></span>
+        <span class="t-green"></span>
+      </div>
+      <span class="floating-nav-title">nav.ts</span>
+      <i class="bi bi-grip-vertical floating-nav-grip"></i>
+    </div>
+    <div class="floating-nav-body">
+      <a href="#about"      class="floating-nav-item"><span class="fn-num">01</span><span class="fn-name">about</span><span class="fn-paren">()</span></a>
+      <a href="#projects"   class="floating-nav-item"><span class="fn-num">02</span><span class="fn-name">projects</span><span class="fn-paren">()</span></a>
+      <a href="#experience" class="floating-nav-item"><span class="fn-num">03</span><span class="fn-name">changelog</span><span class="fn-paren">()</span></a>
+      <a href="#stack"      class="floating-nav-item"><span class="fn-num">04</span><span class="fn-name">dependencies</span><span class="fn-paren">()</span></a>
+      <button id="openContactModal" class="floating-nav-item floating-nav-ping" type="button"><span class="fn-num">05</span><span class="fn-name">ping</span><span class="fn-paren">()</span></button>
+    </div>
+  </div>
+
+  <!-- Minimised bubble (shown when panel is closed) -->
+  <button class="floating-nav-bubble" id="floatingNavBubble" hidden type="button" aria-label="Open navigation"><i class="bi bi-terminal-fill"></i></button>
+
+  <!-- Main content landmark -->
+  <main id="main-content">
+  <!-- About -->
+  <section id="about" class="section reveal">
+    <div class="section-inner">
+      <div class="section-label">// about.ts</div>
+      <h2 class="section-title">$ whoami</h2>
+      <div class="about-grid">
+        <div class="about-text">
+          <p>Senior Software Engineer with <strong>12 years</strong> of experience architecting high-scale backend microservices serving millions of active users. I specialize in backend system design, cloud-native infrastructure (<code>AWS</code>, <code>GCP</code>, <code>Terraform</code>), and modern SRE practices — building the systems <em>and</em> the teams that keep them running.</p>
+          <p>At <strong>Fandango</strong>, I serve as Tech Lead for cross-functional Agile teams — owning backend architecture for core ticket distribution systems, driving our DevSecOps pipeline, and keeping MTTR low on production-critical services. I also coach and mentor engineers across seniority levels.</p>
+          <p>Before Fandango, I spent 5+ years at <strong>Northrop Grumman</strong> building and leading test/integration systems — where I picked up the rigor around reliability, safety, and process that still shapes how I build today.</p>
+          <p>Lately I've been going deep on AI-assisted engineering — integrating LLM APIs (<code>OpenAI</code>, <code>Gemini</code>, <code>Claude</code>) into real developer tooling rather than just chat wrappers.</p>
+          <p><strong>Marquette University</strong> — B.S. Computer Engineering, class of 2014. Upsilon Pi Epsilon honors society.</p>
+        </div>
+        <div class="about-metrics">
+          <div class="metric"><div class="metric-value">12</div><div class="metric-label">years.exp</div></div>
+          <div class="metric"><div class="metric-value">M+</div><div class="metric-label">users.served</div></div>
+          <div class="metric"><div class="metric-value">24/7</div><div class="metric-label">uptime.sla</div></div>
+          <div class="metric"><div class="metric-value">∞</div><div class="metric-label">coffee.consumed</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Projects -->
+  <section id="projects" class="section reveal">
+    <div class="section-inner">
+      <div class="section-label">// projects.ts</div>
+      <h2 class="section-title">$ ls -la ~/projects</h2>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-status project-status-secondary"><span class="status-dot"></span> PRODUCTION</div>
+        </div>
+        <h3 class="project-title">Automated CI/CD &amp; Security Pipeline</h3>
+        <p class="project-desc">Zero-touch continuous deployment. GitHub Actions orchestration with semantic versioning, Lighthouse CI performance gates, Gitleaks secrets scanning, 196-test Jest suite, and strict CSP headers — all gates must pass before deploy.</p>
+        <div class="project-code"><span class="c"># .github/workflows/ci.yml</span>
+<span class="p">jobs</span>:
+  <span class="f">audit</span>: [<span class="s">jest</span>, <span class="s">lighthouse</span>, <span class="s">gitleaks</span>, <span class="s">csp-validate</span>]
+  <span class="f">release</span>:
+    <span class="p">needs</span>: audit
+    <span class="p">uses</span>: <span class="s">release-please-action@v4</span></div>
+        <div class="project-pills">
+          <span class="tech-pill">GitHub Actions</span>
+          <span class="tech-pill">Lighthouse CI</span>
+          <span class="tech-pill">Jest</span>
+          <span class="tech-pill">Gitleaks</span>
+          <span class="tech-pill">CSP</span>
+        </div>
+        <a href="https://github.com/chrispivonka/chrispivonka.com" target="_blank" rel="noopener noreferrer" class="project-link">view_repo() →</a>
+      </div>
+
+      <div class="project-card">
+        <div class="project-header">
+          <div class="project-status"><span class="status-dot"></span> ARCHITECTURE</div>
+        </div>
+        <h3 class="project-title">Low-Latency Edge Media Delivery</h3>
+        <p class="project-desc">Secure, low-latency live media distribution architecture on AWS. CloudFront CDN edge caching with Lambda@Edge request interception, token verification, and automated IaC deployments.</p>
+        <div class="project-code"><span class="c">// edge/auth.js — Lambda@Edge viewer-request interceptor</span>
+<span class="f">exports</span>.handler <span class="b">=</span> <span class="k">async</span> (event) <span class="b">=></span> {
+  <span class="k">const</span> request = event.Records[<span class="n">0</span>].cf.request;
+  <span class="k">const</span> token = request.headers[<span class="s">'x-auth-token'</span>]?.[<span class="n">0</span>]?.value;
+  <span class="k">if</span> (!token || !<span class="f">verifySignature</span>(token)) {
+    <span class="k">return</span> { status: <span class="s">'403'</span>, statusDescription: <span class="s">'Forbidden'</span> };
+  }
+  <span class="k">return</span> request;
+};</div>
+        <div class="project-pills">
+          <span class="tech-pill">AWS CloudFront</span>
+          <span class="tech-pill">Lambda@Edge</span>
+          <span class="tech-pill">Node.js</span>
+          <span class="tech-pill">OAuth2 / JWT</span>
+          <span class="tech-pill">CloudFormation</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Experience -->
+  <section id="experience" class="section reveal">
+    <div class="section-inner">
+      <div class="section-label">// changelog.ts</div>
+      <h2 class="section-title">$ git log --oneline</h2>
+      <div class="timeline">
+        <div class="timeline-entry">
+          <div class="timeline-date">2019 — present</div>
+          <div class="timeline-content">
+            <h3 class="timeline-title">Software Engineer / Tech Lead</h3>
+            <div class="timeline-company">@ Fandango · Remote</div>
+            <p>Tech lead for cross-functional Agile teams delivering backend microservices (<code>C#</code>, <code>Node.js</code>, <code>Python</code>) powering core ticket distribution for millions of active users. Established DevSecOps practices and automated CI/CD pipelines; built SRE observability dashboards that cut MTTR on production-critical incidents. Optimized relational and NoSQL data stores — restructuring queries and caching layers to drive down API latency. Mentor engineers across seniority levels and own sprint planning and roadmap alignment.</p>
+          </div>
+        </div>
+        <div class="timeline-entry">
+          <div class="timeline-date">Sep 2018 — Sep 2019</div>
+          <div class="timeline-content">
+            <h3 class="timeline-title">Software Engineer</h3>
+            <div class="timeline-company">@ Northrop Grumman · Greater Los Angeles</div>
+            <p>Developed embedded <code>C</code> solutions for mission-critical aerospace systems within an Agile development team.</p>
+          </div>
+        </div>
+        <div class="timeline-entry">
+          <div class="timeline-date">Oct 2016 — Sep 2018</div>
+          <div class="timeline-content">
+            <h3 class="timeline-title">Software/Hardware Test &amp; Integration Lead</h3>
+            <div class="timeline-company">@ Northrop Grumman · Greater Chicago</div>
+            <p>Redesigned test automation in <code>Python</code>, <code>Java</code>, <code>C++</code>, and <code>C#</code>, standardizing validation across the department with Jenkins-based CI. Led Git migration, served as SME liaison to customers and subcontractors. Mentored junior engineers and owned staffing/cost/schedule metrics.</p>
+          </div>
+        </div>
+        <div class="timeline-entry">
+          <div class="timeline-date">Jun 2014 — Oct 2016</div>
+          <div class="timeline-content">
+            <h3 class="timeline-title">Computer/Software Engineer — Professional Development Program</h3>
+            <div class="timeline-company">@ Northrop Grumman · Greater Chicago</div>
+            <p>Rotational program across software engineering, integration &amp; test, modeling &amp; simulation, and program management. Built a GUI and automated monitoring/error-logging suite for external embedded systems; developed real-time <code>C++</code> test drivers.</p>
+          </div>
+        </div>
+        <div class="timeline-entry">
+          <div class="timeline-date">Sep 2011 — May 2014</div>
+          <div class="timeline-content">
+            <h3 class="timeline-title">IT Support Specialist &amp; Student Manager</h3>
+            <div class="timeline-company">@ Marquette University · Milwaukee, WI</div>
+            <p>Promoted to Student Manager; coordinated hiring, onboarding, and training of the support team. Delivered Tier 1/2 technical support and authored troubleshooting documentation that standardized support practices across the department.</p>
+          </div>
+        </div>
+      </div>
+      <div class="education-block">
+        <div class="section-label">// education</div>
+        <div class="timeline-entry">
+          <div class="timeline-date">2010 — 2014</div>
+          <div class="timeline-content">
+            <h3 class="timeline-title">B.S. Computer Engineering</h3>
+            <div class="timeline-company">@ Marquette University — Milwaukee, WI</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stack -->
+  <section id="stack" class="section reveal">
+    <div class="section-inner">
+      <div class="section-label">// package.json</div>
+      <h2 class="section-title">$ cat dependencies</h2>
+      <div class="stack-category">
+        <h3 class="stack-category-title">// languages</h3>
+        <div class="stack-grid">
+          <div class="stack-item">C# / .NET</div>
+          <div class="stack-item">JavaScript</div>
+          <div class="stack-item">Python</div>
+          <div class="stack-item">Node.js</div>
+          <div class="stack-item">C / C++</div>
+          <div class="stack-item">Java</div>
+          <div class="stack-item">SQL</div>
+          <div class="stack-item">Bash</div>
+          <div class="stack-item">HTML / CSS</div>
+        </div>
+      </div>
+      <div class="stack-category">
+        <h3 class="stack-category-title">// infrastructure</h3>
+        <div class="stack-grid">
+          <div class="stack-item">AWS</div>
+          <div class="stack-item">Docker</div>
+          <div class="stack-item">Terraform</div>
+          <div class="stack-item">DynamoDB</div>
+          <div class="stack-item">PostgreSQL</div>
+          <div class="stack-item">Redis</div>
+          <div class="stack-item">MongoDB</div>
+          <div class="stack-item">Google Cloud</div>
+          <div class="stack-item">Express</div>
+        </div>
+      </div>
+      <div class="stack-category">
+        <h3 class="stack-category-title">// devtools</h3>
+        <div class="stack-grid">
+          <div class="stack-item">React / Redux</div>
+          <div class="stack-item">GitHub Actions</div>
+          <div class="stack-item">CloudWatch</div>
+          <div class="stack-item">Elasticsearch</div>
+          <div class="stack-item">Jenkins</div>
+          <div class="stack-item">Jest / Pytest</div>
+          <div class="stack-item">Postman</div>
+          <div class="stack-item">Linux / macOS</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section id="contact" class="section reveal">
+    <div class="section-inner contact-section">
+      <div class="section-label">// connect.ts</div>
+      <h2 class="section-title">$ ping chris</h2>
+      <p class="contact-desc">Want to talk distributed systems, cloud architecture, or have something interesting to build? I'm always up for a good engineering conversation.</p>
+      <div class="contact-links">
+        <button class="contact-pill" id="openContactFromSection"><i class="bi bi-envelope"></i> chris@chrispivonka.com</button>
+        <a href="https://github.com/chrispivonka" target="_blank" rel="noopener noreferrer" class="contact-pill"><i class="bi bi-github"></i> github/chrispivonka</a>
+        <a href="https://linkedin.com/in/chrispivonka" target="_blank" rel="noopener noreferrer" class="contact-pill"><i class="bi bi-linkedin"></i> in/chrispivonka</a>
+      </div>
+    </div>
+  </section>
+  </main>
+
+  <footer class="site-footer" data-secret="try: type 'coffee' on the page">
+    <span>© <span id="current-year">2026</span> Chris Pivonka</span>
+    <div class="footer-commit">
+      <i class="bi bi-git"></i>
+      <a href="https://github.com/chrispivonka/chrispivonka.com" target="_blank" rel="noopener noreferrer" id="footer-commit-hash">v2.0.0 · view source →</a>
+    </div>
+  </footer>
+
+  <!-- Hidden elements for test compatibility (not cliInput/cliBody — those live in the terminal tab) -->
+  <div style="display:none" aria-hidden="true">
+    <div id="hud-load"></div>
+    <div id="hud-mem"></div>
+    <div id="hud-latency"></div>
+  </div>
+
+  <script type="module" src="js/scripts.js"></script>
+
+  <!-- Contact Modal -->
+  <div id="contactModal" class="contact-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="contactModalTitle" hidden>
+    <div class="contact-modal">
+      <div class="contact-modal-header">
+        <div>
+          <div class="contact-modal-label">// connect.ts</div>
+          <h2 id="contactModalTitle" class="contact-modal-title">$ ping chris</h2>
+        </div>
+        <button class="contact-modal-close" id="closeContactModal" aria-label="Close contact form">×</button>
+      </div>
+
+      <div id="contactModalSuccess" class="contact-modal-success" hidden>
+        <div class="contact-success-icon">✓</div>
+        <p class="contact-success-title">Message sent successfully.</p>
+        <p class="contact-success-sub">I'll get back to you as soon as possible!</p>
+        <button class="contact-btn" id="contactSuccessClose">Close</button>
+      </div>
+
+      <form id="contactModalForm" class="contact-modal-form" novalidate>
+        <!-- Honeypot: hidden from users, catches bots -->
+        <div aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;pointer-events:none;">
+          <label for="cm-website">Website</label>
+          <input type="text" id="cm-website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="contact-field">
+          <label class="contact-label" for="cm-name">Name <span class="contact-required">*</span></label>
+          <input class="contact-input" id="cm-name" type="text" placeholder="Ada Lovelace" autocomplete="name" required>
+          <div class="contact-error" id="cm-name-error"></div>
+        </div>
+
+        <div class="contact-field">
+          <label class="contact-label" for="cm-email">Email <span class="contact-required">*</span></label>
+          <input class="contact-input" id="cm-email" type="email" placeholder="ada@example.com" autocomplete="email" required>
+          <div class="contact-error" id="cm-email-error"></div>
+        </div>
+
+        <div class="contact-field">
+          <label class="contact-label" for="cm-phone">Phone <span class="contact-optional">(optional)</span></label>
+          <input class="contact-input" id="cm-phone" type="tel" placeholder="(303) 555-0100" autocomplete="tel">
+          <div class="contact-error" id="cm-phone-error"></div>
+        </div>
+
+        <div class="contact-field">
+          <label class="contact-label" for="cm-message">Message <span class="contact-required">*</span></label>
+          <textarea class="contact-input contact-textarea" id="cm-message" placeholder="Let's talk distributed systems, cloud architecture, or something interesting to build…" required></textarea>
+          <div class="contact-error" id="cm-message-error"></div>
+        </div>
+
+        <div class="contact-modal-footer">
+          <p class="contact-footer-note">Reaches me directly — no third-party CRM.</p>
+          <button class="contact-btn contact-btn-primary" id="cm-submit" type="submit">
+            <span id="cm-submit-text">Send message</span>
+            <span id="cm-submit-spinner" class="contact-spinner" hidden></span>
+          </button>
+        </div>
+
+        <div class="contact-error contact-submit-error" id="cm-submit-error" hidden></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="js/contact-modal.js"></script>
+</body>
 </html>

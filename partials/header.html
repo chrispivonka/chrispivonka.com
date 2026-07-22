@@ -1,8 +1,12 @@
 <!-- Navigation-->
-<nav class="navbar navbar-expand-lg navbar-light bg-white py-3 sticky-top">
-  <div class="container px-5">
+<nav class="navbar navbar-expand-lg navbar-light py-3 sticky-top glass-card border-bottom border-0 rounded-0">
+  <div class="container px-4 px-lg-5">
+    <a class="navbar-brand font-mono fw-bold text-decoration-none d-flex align-items-center" href="index.html">
+      <span class="status-pulse me-2"></span>
+      <span class="text-primary">&gt;_</span> <span class="cyber-gradient-text">chrispivonka</span><span class="text-muted fs-6 font-mono ms-1">:~ $</span>
+    </a>
     <button
-      class="navbar-toggler"
+      class="navbar-toggler border-0 shadow-none"
       type="button"
       data-bs-toggle="collapse"
       data-bs-target="#navbarSupportedContent"
@@ -13,24 +17,33 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="navbarSupportedContent">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0 small fw-bolder">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0 font-mono small fw-bold align-items-lg-center gap-lg-3">
         <li class="nav-item">
-          <a class="nav-link" href="index.html">Home</a>
+          <a class="nav-link px-3 py-2" href="index.html">// home</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="resume.html">Resume</a>
+          <a class="nav-link px-3 py-2" href="projects.html">// projects</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="projects.html">Projects</a>
+          <a class="nav-link px-3 py-2" href="resume.html">// resume</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="contact.html">Contact</a>
+          <a class="nav-link px-3 py-2" href="contact.html">// contact</a>
         </li>
-        <li class="nav-item">
+        <li class="nav-item d-flex gap-2 ms-lg-2">
+          <button
+            id="audioToggle"
+            class="btn btn-sm btn-outline-secondary rounded-circle p-2"
+            title="Audio Feedback: OFF"
+            aria-label="Toggle audio feedback"
+          >
+            <i class="bi bi-volume-mute-fill text-muted"></i>
+          </button>
           <button
             id="darkModeToggle"
-            class="dark-mode-toggle"
-            title="Toggle dark mode"
+            class="dark-mode-toggle btn btn-sm btn-outline-secondary rounded-circle p-2"
+            title="Toggle theme mode"
+            aria-label="Toggle dark mode"
           >
             <i class="bi bi-moon-fill"></i>
           </button>
@@ -39,3 +52,5 @@
     </div>
   </div>
 </nav>
+
+
