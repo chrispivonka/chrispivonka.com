@@ -931,18 +931,23 @@ async function initLiveStats() {
       }
     }
 
-    // ── update uptime label with last-commit age ──
-    if (commits[0] && commits[0].commit && commits[0].commit.author) {
-      const lastPush   = new Date(commits[0].commit.author.date);
-      const ageMinutes = Math.floor((Date.now() - lastPush) / 60000);
+    // ── update uptime label ──
+    if (commits[0] && commits[0].commit) {
+      const commitDateStr = (commits[0].commit.committer && commits[0].commit.committer.date) ||
+                            (commits[0].commit.author && commits[0].commit.author.date);
+      const lastPush   = new Date(commitDateStr);
+      const diffMs     = Date.now() - lastPush.getTime();
+      const ageMinutes = Math.max(0, Math.floor(diffMs / 60000));
       const uptimeEl   = document.querySelector(".status-uptime");
       if (uptimeEl) {
-        if (ageMinutes < 60) {
-          uptimeEl.textContent = `last push ${ageMinutes}m ago`;
+        if (isNaN(ageMinutes) || ageMinutes > 43200) {
+          uptimeEl.textContent = "uptime: 99.9%";
+        } else if (ageMinutes < 60) {
+          uptimeEl.textContent = `last push ${Math.max(1, ageMinutes)}m ago`;
         } else if (ageMinutes < 1440) {
-          uptimeEl.textContent = `last push ${Math.floor(ageMinutes/60)}h ago`;
+          uptimeEl.textContent = `last push ${Math.floor(ageMinutes / 60)}h ago`;
         } else {
-          uptimeEl.textContent = `last push ${Math.floor(ageMinutes/1440)}d ago`;
+          uptimeEl.textContent = `last push ${Math.floor(ageMinutes / 1440)}d ago`;
         }
       }
     }
@@ -1348,6 +1353,9 @@ function initFloatingNav() {
     }
   }
 
+  const yellowBtn = document.getElementById("floatingNavReset");
+  const greenBtn  = document.getElementById("floatingNavExpand");
+
   if (closeBtn) {
     closeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1355,6 +1363,27 @@ function initFloatingNav() {
       if (bubble) {
         bubble.hidden = false;
       }
+    });
+  }
+
+  if (yellowBtn) {
+    yellowBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      resetPosition();
+      showToast("📌 Nav position reset");
+    });
+  }
+
+  if (greenBtn) {
+    let isCollapsed = false;
+    const navBody = panel.querySelector(".floating-nav-body");
+    greenBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      isCollapsed = !isCollapsed;
+      if (navBody) {
+        navBody.style.display = isCollapsed ? "none" : "";
+      }
+      showToast(isCollapsed ? "🔽 Nav collapsed" : "🔼 Nav expanded");
     });
   }
 
