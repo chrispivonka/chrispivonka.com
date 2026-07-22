@@ -138,7 +138,7 @@ function renderSTLArrayBuffer(container, arrayBuffer, fileName = "Local STL File
   window.addEventListener("resize", onResize);
 }
 
-async function loadSampleSTL(container, stlUrl = "./sample-box.stl", fileName = "sample-box.stl") {
+async function loadSampleSTL(container, stlUrl = "./output.stl", fileName = "output.stl") {
   try {
     const res = await fetch(stlUrl);
     if (!res.ok) throw new Error("Failed to fetch STL");
@@ -332,8 +332,8 @@ async function updateTelemetryUI() {
   } else if (telemetry && telemetry.status === "PRINTING" && telemetry.streamUrl) {
     viewportContainer.innerHTML = `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`;
   } else if (!currentScene) {
-    const stlUrl = (telemetry && telemetry.stlUrl) ? telemetry.stlUrl : "./sample-box.stl";
-    const stlName = (telemetry && telemetry.modelName) ? telemetry.modelName : "sample-box.stl";
+    const stlUrl = (telemetry && telemetry.stlUrl) ? telemetry.stlUrl : "./output.stl";
+    const stlName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
     loadSampleSTL(viewportContainer, stlUrl, stlName);
   }
 }
