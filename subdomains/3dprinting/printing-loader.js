@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { TwoMFLoader as ThreeMFLoader } from "three/addons/loaders/3MFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import PRINTING_CONFIG from "./printing-config.js";
 
@@ -37,17 +38,19 @@ function cleanupThreeScene() {
   currentScene = null;
 }
 
-function renderSTLArrayBuffer(container, arrayBuffer, fileName = "Local STL File") {
+function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
   cleanupThreeScene();
   if (!container) return;
+
+  const is3MF = fileName.toLowerCase().endsWith(".3mf");
 
   container.innerHTML = `
     <div id="threejs-viewport" style="width:100%; height:100%; position:relative;"></div>
     <div style="position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:0.68rem; color:var(--text); background:rgba(13,17,23,0.85); padding:6px 10px; border-radius:4px; border:1px solid var(--cyan); display:flex; align-items:center; gap:0.6rem; z-index:10;">
       <i class="bi bi-box-seam" style="color:var(--cyan);"></i>
-      <span>STL: <strong>${fileName}</strong></span>
+      <span>Model: <strong>${fileName}</strong> (${is3MF ? "3MF Package" : "STL Mesh"})</span>
       <button id="toggle-wireframe-btn" style="background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); padding:2px 6px; border-radius:3px; cursor:pointer; font-size:0.65rem;">Toggle Wireframe</button>
-      <label for="stl-file-input" style="background:var(--cyan); color:#000; border:none; padding:2px 8px; border-radius:3px; cursor:pointer; font-weight:600; font-size:0.65rem;">Load Local STL File...</label>
+      <label for="stl-file-input" style="background:var(--cyan); color:#000; border:none; padding:2px 8px; border-radius:3px; cursor:pointer; font-weight:600; font-size:0.65rem;">Load STL / 3MF File...</label>
     </div>
   `;
 
@@ -73,8 +76,8 @@ function renderSTLArrayBuffer(container, arrayBuffer, fileName = "Local STL File
   controls.dampingFactor = 0.05;
   currentControls = controls;
 
-  // Ambient & Directional Lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
   scene.add(ambientLight);
 
   const dirLight1 = new THREE.DirectionalLight(0x58a6ff, 1.2);
@@ -85,42 +88,72 @@ function renderSTLArrayBuffer(container, arrayBuffer, fileName = "Local STL File
   dirLight2.position.set(-100, -100, -50);
   scene.add(dirLight2);
 
-  // Parse STL Geometry
-  const loader = new STLLoader();
-  const geometry = loader.parse(arrayBuffer);
-  geometry.computeVertexNormals();
-  geometry.center();
+  let modelGroup = new THREE.Group();
+  let materialsList = [];
 
-  // Compute bounding sphere for auto camera distance
-  geometry.computeBoundingSphere();
-  const radius = geometry.boundingSphere ? geometry.boundingSphere.radius : 40;
-  camera.position.set(0, radius * 1.5, radius * 2.2);
+  if (is3MF) {
+    try {
+      const loader = new ThreeMFLoader();
+      const object = loader.parse(arrayBuffer);
+      modelGroup = object;
+      object.traverse((child) => {
+        if (child.isMesh) {
+          if (child.material) {
+            materialsList.push(child.material);
+          }
+        }
+      });
+    } catch (err) {
+      console.warn("Could not parse 3MF file:", err);
+    }
+  } else {
+    // STL Fallback
+    const loader = new STLLoader();
+    const geometry = loader.parse(arrayBuffer);
+    geometry.computeVertexNormals();
+    geometry.center();
+
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x58a6ff,
+      roughness: 0.3,
+      metalness: 0.4,
+      wireframe: false
+    });
+    materialsList.push(mat);
+
+    const mesh = new THREE.Mesh(geometry, mat);
+    modelGroup.add(mesh);
+  }
+
+  scene.add(modelGroup);
+
+  // Center & Auto-fit camera position to model bounds
+  const box = new THREE.Box3().setFromObject(modelGroup);
+  const center = box.getCenter(new THREE.Vector3());
+  modelGroup.position.sub(center);
+
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 40;
+  camera.position.set(0, maxDim * 1.2, maxDim * 2.0);
   camera.lookAt(0, 0, 0);
 
-  // Metallic Mesh Material
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x58a6ff,
-    roughness: 0.3,
-    metalness: 0.4,
-    wireframe: false
-  });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  scene.add(mesh);
-
-  // Wireframe toggle button handler
+  // Wireframe toggle
   const toggleBtn = document.getElementById("toggle-wireframe-btn");
   if (toggleBtn) {
+    let isWire = false;
     toggleBtn.addEventListener("click", () => {
-      material.wireframe = !material.wireframe;
-      toggleBtn.textContent = material.wireframe ? "Solid View" : "Toggle Wireframe";
+      isWire = !isWire;
+      materialsList.forEach((m) => {
+        if (m) m.wireframe = isWire;
+      });
+      toggleBtn.textContent = isWire ? "Solid View" : "Toggle Wireframe";
     });
   }
 
   // Animation Loop
   function animate() {
     animFrameId = requestAnimationFrame(animate);
-    mesh.rotation.y += 0.003;
+    modelGroup.rotation.y += 0.003;
     controls.update();
     renderer.render(scene, camera);
   }
@@ -138,14 +171,14 @@ function renderSTLArrayBuffer(container, arrayBuffer, fileName = "Local STL File
   window.addEventListener("resize", onResize);
 }
 
-async function loadSampleSTL(container, stlUrl = "./output.stl", fileName = "output.stl") {
+async function loadSampleModel(container, modelUrl = "./output.stl", fileName = "output.stl") {
   try {
-    const res = await fetch(stlUrl);
-    if (!res.ok) throw new Error("Failed to fetch STL");
+    const res = await fetch(modelUrl);
+    if (!res.ok) throw new Error("Failed to fetch model");
     const buffer = await res.arrayBuffer();
-    renderSTLArrayBuffer(container, buffer, fileName);
+    render3DArrayBuffer(container, buffer, fileName);
   } catch (err) {
-    console.warn("Could not load sample STL, falling back to 3D canvas:", err);
+    console.warn("Could not load sample model:", err);
   }
 }
 
@@ -168,10 +201,11 @@ function setupDragAndDrop(container) {
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
-      if (file.name.toLowerCase().endsWith(".stl") || file.name.toLowerCase().endsWith(".3mf")) {
+      const ext = file.name.toLowerCase();
+      if (ext.endsWith(".stl") || ext.endsWith(".3mf")) {
         const reader = new FileReader();
         reader.onload = (event) => {
-          renderSTLArrayBuffer(container, event.target.result, file.name);
+          render3DArrayBuffer(container, event.target.result, file.name);
         };
         reader.readAsArrayBuffer(file);
       }
@@ -220,7 +254,7 @@ function renderSpecs(telemetry) {
 
   const temps = telemetry && telemetry.temps ? telemetry.temps : {};
   const activeStatus = telemetry && telemetry.status ? telemetry.status : PRINTING_CONFIG.status;
-  const cadModelName = telemetry && telemetry.modelName ? telemetry.modelName : "sample-box.stl";
+  const cadModelName = telemetry && telemetry.modelName ? telemetry.modelName : "output.stl";
 
   const specsList = [
     { label: "status", value: activeStatus === "PRINTING" ? "PRINTING LIVE" : "STANDBY" },
@@ -304,7 +338,7 @@ function setupFileInputHandler(container) {
       const file = files[0];
       const reader = new FileReader();
       reader.onload = (evt) => {
-        renderSTLArrayBuffer(container, evt.target.result, file.name);
+        render3DArrayBuffer(container, evt.target.result, file.name);
       };
       reader.readAsArrayBuffer(file);
     }
@@ -332,9 +366,9 @@ async function updateTelemetryUI() {
   } else if (telemetry && telemetry.status === "PRINTING" && telemetry.streamUrl) {
     viewportContainer.innerHTML = `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`;
   } else if (!currentScene) {
-    const stlUrl = (telemetry && telemetry.stlUrl) ? telemetry.stlUrl : "./output.stl";
-    const stlName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
-    loadSampleSTL(viewportContainer, stlUrl, stlName);
+    const modelUrl = (telemetry && telemetry.modelUrl) ? telemetry.modelUrl : "./output.stl";
+    const modelName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
+    loadSampleModel(viewportContainer, modelUrl, modelName);
   }
 }
 

@@ -18,7 +18,8 @@
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"
     }
   }
   </script>
@@ -485,7 +486,7 @@
     <a href="https://github.com/chrispivonka/chrispivonka.com" target="_blank" rel="noopener">v2.0.1</a>
   </footer>
 
-  <input type="file" id="stl-file-input" accept=".stl" style="display:none;" />
+  <input type="file" id="stl-file-input" accept=".stl,.3mf" style="display:none;" />
   <script type="module" src="./printing-loader.js"></script>
 </body>
 </html>
