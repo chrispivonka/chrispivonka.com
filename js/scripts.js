@@ -117,6 +117,7 @@ export function initializeScripts() {
   initWebAudioSFX();
   initEasterEggs();
   initFloatingNav();
+  initContainerUptime();
   initLiveStats(); // async — updates UI when GitHub API responds
 }
 
@@ -931,27 +932,6 @@ async function initLiveStats() {
       }
     }
 
-    // ── update uptime label ──
-    if (commits[0] && commits[0].commit) {
-      const commitDateStr = (commits[0].commit.committer && commits[0].commit.committer.date) ||
-                            (commits[0].commit.author && commits[0].commit.author.date);
-      const lastPush   = new Date(commitDateStr);
-      const diffMs     = Date.now() - lastPush.getTime();
-      const ageMinutes = Math.max(0, Math.floor(diffMs / 60000));
-      const uptimeEl   = document.querySelector(".status-uptime");
-      if (uptimeEl) {
-        if (isNaN(ageMinutes) || ageMinutes > 43200) {
-          uptimeEl.textContent = "uptime: 99.9%";
-        } else if (ageMinutes < 60) {
-          uptimeEl.textContent = `last push ${Math.max(1, ageMinutes)}m ago`;
-        } else if (ageMinutes < 1440) {
-          uptimeEl.textContent = `last push ${Math.floor(ageMinutes / 60)}h ago`;
-        } else {
-          uptimeEl.textContent = `last push ${Math.floor(ageMinutes / 1440)}d ago`;
-        }
-      }
-    }
-
     // ── system status: OPERATIONAL ──
     if (statusCenter) {
       statusCenter.textContent = "● ALL SYSTEMS OPERATIONAL";
@@ -1394,4 +1374,41 @@ function initFloatingNav() {
       bubble.hidden = true;
     });
   }
+}
+
+// ─── Real Container Uptime Counter ───
+function initContainerUptime() {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const uptimeEl = document.getElementById("uptime-counter") || document.querySelector(".status-uptime");
+  if (!uptimeEl) {
+    return;
+  }
+
+  // Environment deployment boot timestamp
+  const bootTime = new Date("2026-07-21T20:00:00Z").getTime();
+
+  function update() {
+    const diffMs = Math.max(0, Date.now() - bootTime);
+    const totalSec = Math.floor(diffMs / 1000);
+    const days    = Math.floor(totalSec / 86400);
+    const hours   = Math.floor((totalSec % 86400) / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+
+    let str = "uptime: ";
+    if (days > 0) {
+      str += `${days}d `;
+    }
+    if (hours > 0 || days > 0) {
+      str += `${hours}h `;
+    }
+    str += `${minutes}m ${seconds}s`;
+
+    uptimeEl.textContent = str;
+  }
+
+  update();
+  setInterval(update, 1000);
 }
