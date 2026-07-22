@@ -367,21 +367,43 @@ function renderPrintHistory(telemetry) {
   if (!historyContainer) return;
 
   const history = (telemetry && telemetry.printHistory) || [
-    { id: "job-112", name: "ESP32_Environmental_Sensor_Housing.gcode", material: "PETG Charcoal", printTime: "1h 26m", filamentWeight: "38.4g", completedAt: "2026-07-21 18:40", status: "COMPLETED" },
-    { id: "job-111", name: "RPi4_DIN_Rail_Mount_Bracket.gcode", material: "PLA+ White", printTime: "48m", filamentWeight: "19.2g", completedAt: "2026-07-20 14:15", status: "COMPLETED" },
-    { id: "job-110", name: "MagicMirror_Corner_Bezel_TL.gcode", material: "ABS Black", printTime: "2h 12m", filamentWeight: "51.8g", completedAt: "2026-07-19 09:30", status: "COMPLETED" }
+    { id: "job-112", name: "ESP32_Environmental_Sensor_Housing.gcode", modelName: "output.stl", modelUrl: "./output.stl", material: "PETG Charcoal", printTime: "1h 26m", filamentWeight: "38.4g", completedAt: "2026-07-21 18:40", status: "COMPLETED" },
+    { id: "job-111", name: "RPi4_DIN_Rail_Mount_Bracket.gcode", modelName: "sample-box.stl", modelUrl: "./sample-box.stl", material: "PLA+ White", printTime: "48m", filamentWeight: "19.2g", completedAt: "2026-07-20 14:15", status: "COMPLETED" },
+    { id: "job-110", name: "MagicMirror_Corner_Bezel_TL.gcode", modelName: "output.stl", modelUrl: "./output.stl", material: "ABS Black", printTime: "2h 12m", filamentWeight: "51.8g", completedAt: "2026-07-19 09:30", status: "COMPLETED" }
   ];
 
   historyContainer.innerHTML = history.map(item => `
-    <tr class="history-row">
+    <tr class="history-row" data-model-url="${item.modelUrl || './output.stl'}" data-model-name="${item.modelName || item.name}">
       <td class="h-name"><i class="bi bi-file-earmark-code" style="color: var(--cyan);"></i> ${item.name}</td>
       <td class="h-mat">${item.material}</td>
       <td class="h-time">${item.printTime}</td>
       <td class="h-weight">${item.filamentWeight || "N/A"}</td>
       <td class="h-date">${item.completedAt}</td>
-      <td class="h-status"><span class="h-badge">${item.status}</span></td>
+      <td class="h-status">
+        <button class="view-model-btn" style="background: var(--bg-elevated); color: var(--cyan); border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px; font-family: var(--mono); font-size: 0.68rem; cursor: pointer;">
+          <i class="bi bi-box-seam"></i> View 3D Model
+        </button>
+      </td>
     </tr>
   `).join("");
+
+  // Attach click listener to load historical CAD models into 3D viewport
+  const rows = historyContainer.querySelectorAll(".history-row");
+  rows.forEach(row => {
+    row.addEventListener("click", async () => {
+      rows.forEach(r => r.classList.remove("active-history-row"));
+      row.classList.add("active-history-row");
+
+      const modelUrl = row.getAttribute("data-model-url");
+      const modelName = row.getAttribute("data-model-name");
+      const viewportContainer = document.getElementById("printing-container");
+
+      if (viewportContainer && modelUrl) {
+        viewportContainer.scrollIntoView({ behavior: "smooth", block: "center" });
+        await loadSampleModel(viewportContainer, modelUrl, modelName);
+      }
+    });
+  });
 }
 
 function renderProjects() {
