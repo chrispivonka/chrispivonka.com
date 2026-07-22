@@ -141,25 +141,32 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
   controls.dampingFactor = 0.05;
   currentControls = controls;
 
-  // Auto-rotation pause & inactivity resumption logic
+  // Click & Drag repositioning pauses auto-rotation (Zooming via wheel does NOT pause)
   let autoRotate = true;
   let inactivityTimer = null;
-  const INACTIVITY_DELAY_MS = 5000; // Resumes auto-rotation after 5 seconds of idle
+  const INACTIVITY_DELAY_MS = 5000;
 
-  controls.addEventListener("start", () => {
+  const onDragStart = () => {
     autoRotate = false;
     if (inactivityTimer) {
       clearTimeout(inactivityTimer);
       inactivityTimer = null;
     }
-  });
+  };
 
-  controls.addEventListener("end", () => {
-    if (inactivityTimer) clearTimeout(inactivityTimer);
-    inactivityTimer = setTimeout(() => {
-      autoRotate = true;
-    }, INACTIVITY_DELAY_MS);
-  });
+  const onDragEnd = () => {
+    if (!autoRotate && !inactivityTimer) {
+      inactivityTimer = setTimeout(() => {
+        autoRotate = true;
+        inactivityTimer = null;
+      }, INACTIVITY_DELAY_MS);
+    }
+  };
+
+  renderer.domElement.addEventListener("mousedown", onDragStart);
+  renderer.domElement.addEventListener("touchstart", onDragStart, { passive: true });
+  window.addEventListener("mouseup", onDragEnd);
+  window.addEventListener("touchend", onDragEnd, { passive: true });
 
   // Lighting
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
