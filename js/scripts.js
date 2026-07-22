@@ -1407,8 +1407,14 @@ function initContainerUptime() {
     return;
   }
 
-  // Environment deployment boot timestamp
-  const bootTime = new Date("2026-07-21T20:00:00Z").getTime();
+  let bootTimeStr = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("container_boot_time") : null;
+  if (!bootTimeStr) {
+    bootTimeStr = (Date.now() - 240000).toString(); // Container booted 4 mins ago
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("container_boot_time", bootTimeStr);
+    }
+  }
+  const bootTime = parseInt(bootTimeStr, 10);
 
   function update() {
     const diffMs = Math.max(0, Date.now() - bootTime);

@@ -572,7 +572,15 @@
     setInterval(updateClock, 1000);
 
     // Real Container Uptime Ticker (Matches Main Site)
-    const bootTime = new Date("2026-07-21T20:00:00Z").getTime();
+    let bootTimeStr = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("container_boot_time") : null;
+    if (!bootTimeStr) {
+      bootTimeStr = (Date.now() - 240000).toString();
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("container_boot_time", bootTimeStr);
+      }
+    }
+    const bootTime = parseInt(bootTimeStr, 10);
+
     function updateUptime() {
       const diffMs = Math.max(0, Date.now() - bootTime);
       const totalSec = Math.floor(diffMs / 1000);
