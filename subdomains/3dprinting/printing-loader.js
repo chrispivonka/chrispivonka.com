@@ -40,72 +40,64 @@ function cleanupThreeScene() {
 
 function parse3MFToGroup(arrayBuffer) {
   const unzipped = fflate.unzipSync(new Uint8Array(arrayBuffer));
+  const group = new THREE.Group();
+  const parser = new DOMParser();
 
-  let modelXmlText = null;
   for (const filename in unzipped) {
     if (filename.toLowerCase().endsWith(".model")) {
-      modelXmlText = new TextDecoder().decode(unzipped[filename]);
-      break;
-    }
-  }
+      const modelXmlText = new TextDecoder().decode(unzipped[filename]);
+      const xmlDoc = parser.parseFromString(modelXmlText, "text/xml");
+      const meshNodes = xmlDoc.getElementsByTagName("mesh");
 
-  if (!modelXmlText) {
-    throw new Error("No .model XML found in 3MF archive");
-  }
+      for (let m = 0; m < meshNodes.length; m++) {
+        const meshNode = meshNodes[m];
+        const vertices = [];
+        const indices = [];
 
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(modelXmlText, "text/xml");
+        const vertexNodes = meshNode.getElementsByTagName("vertex");
+        for (let i = 0; i < vertexNodes.length; i++) {
+          const v = vertexNodes[i];
+          vertices.push(
+            parseFloat(v.getAttribute("x") || 0),
+            parseFloat(v.getAttribute("y") || 0),
+            parseFloat(v.getAttribute("z") || 0)
+          );
+        }
 
-  const group = new THREE.Group();
-  const meshNodes = xmlDoc.getElementsByTagName("mesh");
+        const triangleNodes = meshNode.getElementsByTagName("triangle");
+        for (let i = 0; i < triangleNodes.length; i++) {
+          const t = triangleNodes[i];
+          indices.push(
+            parseInt(t.getAttribute("v1"), 10),
+            parseInt(t.getAttribute("v2"), 10),
+            parseInt(t.getAttribute("v3"), 10)
+          );
+        }
 
-  for (let m = 0; m < meshNodes.length; m++) {
-    const meshNode = meshNodes[m];
-    const vertices = [];
-    const indices = [];
+        if (vertices.length > 0) {
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+          if (indices.length > 0) {
+            geometry.setIndex(indices);
+          }
+          geometry.computeVertexNormals();
 
-    const vertexNodes = meshNode.getElementsByTagName("vertex");
-    for (let i = 0; i < vertexNodes.length; i++) {
-      const v = vertexNodes[i];
-      vertices.push(
-        parseFloat(v.getAttribute("x") || 0),
-        parseFloat(v.getAttribute("y") || 0),
-        parseFloat(v.getAttribute("z") || 0)
-      );
-    }
+          const mat = new THREE.MeshStandardMaterial({
+            color: 0x58a6ff,
+            roughness: 0.35,
+            metalness: 0.3,
+            wireframe: false
+          });
 
-    const triangleNodes = meshNode.getElementsByTagName("triangle");
-    for (let i = 0; i < triangleNodes.length; i++) {
-      const t = triangleNodes[i];
-      indices.push(
-        parseInt(t.getAttribute("v1"), 10),
-        parseInt(t.getAttribute("v2"), 10),
-        parseInt(t.getAttribute("v3"), 10)
-      );
-    }
-
-    if (vertices.length > 0) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
-      if (indices.length > 0) {
-        geometry.setIndex(indices);
+          const mesh = new THREE.Mesh(geometry, mat);
+          group.add(mesh);
+        }
       }
-      geometry.computeVertexNormals();
-
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0x58a6ff,
-        roughness: 0.35,
-        metalness: 0.3,
-        wireframe: false
-      });
-
-      const mesh = new THREE.Mesh(geometry, mat);
-      group.add(mesh);
     }
   }
 
   if (group.children.length === 0) {
-    throw new Error("No valid meshes found in 3MF XML model");
+    throw new Error("No valid meshes found in 3MF XML model files");
   }
 
   return group;
