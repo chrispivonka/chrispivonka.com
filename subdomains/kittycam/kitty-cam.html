@@ -343,15 +343,23 @@
     updateClock();
     setInterval(updateClock, 1000);
 
-    // Real-Time Container Uptime Ticker
-    const containerStartTime = performance.timing && performance.timing.navigationStart ? performance.timing.navigationStart : Date.now() - 872000;
+    // Real Container Uptime Ticker (Matches Main Site)
+    const bootTime = new Date("2026-07-21T20:00:00Z").getTime();
     function updateUptime() {
-      const elapsedMs = Date.now() - containerStartTime;
-      const hours = Math.floor(elapsedMs / 3600000);
-      const mins = Math.floor((elapsedMs % 3600000) / 60000);
-      const secs = Math.floor((elapsedMs % 60000) / 1000);
-      const upEl = document.getElementById('uptime-counter');
-      if (upEl) upEl.textContent = `uptime: ${hours}h ${mins}m ${secs}s`;
+      const diffMs = Math.max(0, Date.now() - bootTime);
+      const totalSec = Math.floor(diffMs / 1000);
+      const days = Math.floor(totalSec / 86400);
+      const hours = Math.floor((totalSec % 86400) / 3600);
+      const minutes = Math.floor((totalSec % 3600) / 60);
+      const seconds = totalSec % 60;
+
+      let str = "uptime: ";
+      if (days > 0) str += `${days}d `;
+      if (hours > 0 || days > 0) str += `${hours}h `;
+      str += `${minutes}m ${seconds}s`;
+
+      const upEl = document.getElementById("uptime-counter");
+      if (upEl) upEl.textContent = str;
     }
     updateUptime();
     setInterval(updateUptime, 1000);
