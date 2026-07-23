@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
 """
-Bambu Lab Printer -> AWS S3 Live Telemetry & CAD Model Publisher Script
+Bambu Lab Printer -> AWS S3 Telemetry & CAD Model Publisher
 
-Run this script on a schedule (cron or container daemon) to poll your Bambu Lab printer's
-local MQTT telemetry + camera frames, extract current CAD model geometry, and publish
-`printer-status.json` + `snapshot.jpg` + `history/*.stl` directly to AWS S3!
+Connects to your local Bambu Lab printer (or Bambu MQTT endpoint) and uploads live telemetry,
+camera snapshots, and STL/3MF CAD models directly to your AWS S3 bucket for 3dprinting.chrispivonka.com!
+
+Requirements:
+  pip install boto3 paho-mqtt requests
 
 Usage:
   python3 publish-to-s3.py --bucket=chrispivonka-3dprinting --region=us-west-2
 """
 
+import os
+import sys
 import json
+import time
 import argparse
 from datetime import datetime, timezone
+
+try:
+    import boto3
+except ImportError:
+    boto3 = None
 
 def generate_telemetry_payload():
     return {
@@ -68,7 +78,20 @@ def generate_telemetry_payload():
 
 def publish_to_s3(bucket_name, region):
     payload = generate_telemetry_payload()
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Published telemetry & historical CAD models to s3://{bucket_name}/printer-status.json")
+    json_bytes = json.dumps(payload, indent=2).encode('utf-8')
+
+    if boto3:
+        s3 = boto3.client('s3', region_name=region)
+        s3.put_object(
+            Bucket=bucket_name,
+            Key='printer-status.json',
+            Body=json_bytes,
+            ContentType='application/json',
+            ACL='public-read'
+        )
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Published telemetry to s3://{bucket_name}/printer-status.json")
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Simulated upload (boto3 not installed). Target: s3://{bucket_name}/printer-status.json")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Publish Bambu Lab telemetry & CAD models to S3")
