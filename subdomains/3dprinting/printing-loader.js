@@ -9,6 +9,8 @@ let currentScene = null;
 let currentRenderer = null;
 let currentControls = null;
 let animFrameId = null;
+let currentViewMode = null; // 'stream' | 'cad'
+let userModeOverride = false;
 
 async function fetchPrinterTelemetry() {
   try {
@@ -106,18 +108,31 @@ function parse3MFToGroup(arrayBuffer) {
 async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
   cleanupThreeScene();
   if (!container) return;
+  currentViewMode = "cad";
 
   const is3MF = fileName.toLowerCase().endsWith(".3mf");
 
   container.innerHTML = `
     <div id="threejs-viewport" style="width:100%; height:100%; position:relative;"></div>
-    <div style="position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:0.68rem; color:var(--text); background:rgba(13,17,23,0.85); padding:6px 10px; border-radius:4px; border:1px solid var(--cyan); display:flex; align-items:center; gap:0.6rem; z-index:10;">
+    <div style="position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:0.68rem; color:var(--text); background:rgba(13,17,23,0.85); padding:6px 10px; border-radius:4px; border:1px solid var(--cyan); display:flex; align-items:center; gap:0.6rem; z-index:10; flex-wrap:wrap;">
       <i class="bi bi-box-seam" style="color:var(--cyan);"></i>
       <span>Model: <strong>${fileName}</strong> (${is3MF ? "3MF Package" : "STL Mesh"})</span>
       <button id="toggle-wireframe-btn" style="background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); padding:2px 6px; border-radius:3px; cursor:pointer; font-size:0.65rem;">Toggle Wireframe</button>
       <label for="stl-file-input" style="background:var(--cyan); color:#000; border:none; padding:2px 8px; border-radius:3px; cursor:pointer; font-weight:600; font-size:0.65rem;">Load STL / 3MF File...</label>
+      ${userModeOverride ? `<button id="switch-to-stream-btn" style="background:rgba(63,185,80,0.2); color:var(--green); border:1px solid rgba(63,185,80,0.4); padding:2px 8px; border-radius:3px; cursor:pointer; font-size:0.65rem;">● Return to Live Stream</button>` : ''}
     </div>
   `;
+
+  const returnStreamBtn = document.getElementById("switch-to-stream-btn");
+  if (returnStreamBtn) {
+    returnStreamBtn.addEventListener("click", async () => {
+      userModeOverride = false;
+      const telemetry = await fetchPrinterTelemetry();
+      if (telemetry && (telemetry.streamUrl || telemetry.snapshotUrl)) {
+        renderStreamFeed(container, telemetry);
+      }
+    });
+  }
 
   const viewport = document.getElementById("threejs-viewport");
   const width = container.clientWidth;
@@ -468,6 +483,37 @@ function setupFileInputHandler(container) {
   });
 }
 
+function renderStreamFeed(container, telemetry) {
+  cleanupThreeScene();
+  currentViewMode = "stream";
+
+  const isIframe = Boolean(telemetry && telemetry.streamUrl);
+  const badgeText = isIframe ? "● LIVE CONTAINER STREAM" : "● LIVE SNAPSHOT";
+
+  container.innerHTML = `
+    <div style="width:100%; height:100%; position:relative; background:#000;">
+      ${isIframe
+        ? `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`
+        : `<img src="${telemetry.snapshotUrl}" alt="Live Printer Camera Snapshot" style="width:100%; height:100%; object-fit:contain;" />`
+      }
+      <div style="position:absolute; top:12px; right:16px; font-family:var(--mono); font-size:0.68rem; color:var(--green); background:rgba(10,14,23,0.85); border:1px solid rgba(63,185,80,0.4); padding:6px 12px; border-radius:4px; display:flex; align-items:center; gap:0.6rem; z-index:10;">
+        <span>${badgeText}</span>
+        <button id="switch-to-cad-btn" style="background:var(--bg-elevated); color:var(--cyan); border:1px solid var(--border); padding:2px 8px; border-radius:3px; cursor:pointer; font-size:0.65rem;">View 3D CAD Model</button>
+      </div>
+    </div>
+  `;
+
+  const switchBtn = document.getElementById("switch-to-cad-btn");
+  if (switchBtn) {
+    switchBtn.addEventListener("click", async () => {
+      userModeOverride = true;
+      const modelUrl = (telemetry && telemetry.modelUrl) ? telemetry.modelUrl : "./output.stl";
+      const modelName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
+      await loadSampleModel(container, modelUrl, modelName);
+    });
+  }
+}
+
 async function updateTelemetryUI() {
   const viewportContainer = document.getElementById("printing-container");
   const pollBadge = document.getElementById("live-poll-badge");
@@ -484,14 +530,24 @@ async function updateTelemetryUI() {
   renderAmsSlots(telemetry);
   renderPrintHistory(telemetry);
 
-  if (telemetry && telemetry.status === "PRINTING" && telemetry.snapshotUrl) {
-    viewportContainer.innerHTML = `<img src="${telemetry.snapshotUrl}" alt="Live Printer Camera Snapshot" style="width:100%; height:100%; object-fit:contain; background:#000;" />`;
-  } else if (telemetry && telemetry.status === "PRINTING" && telemetry.streamUrl) {
-    viewportContainer.innerHTML = `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`;
-  } else if (!currentScene) {
-    const modelUrl = (telemetry && telemetry.modelUrl) ? telemetry.modelUrl : "./output.stl";
-    const modelName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
-    await loadSampleModel(viewportContainer, modelUrl, modelName);
+  const isPrinting = telemetry && telemetry.status === "PRINTING";
+  const hasStream = telemetry && (telemetry.streamUrl || telemetry.snapshotUrl);
+
+  if (isPrinting && hasStream) {
+    if (!userModeOverride && currentViewMode !== "stream") {
+      renderStreamFeed(viewportContainer, telemetry);
+    }
+  } else {
+    // Printer is NOT printing (STANDBY / IDLE / COMPLETED)
+    // Clear manual override when job finishes
+    if (!isPrinting) {
+      userModeOverride = false;
+    }
+    if (currentScene === null || currentViewMode === "stream") {
+      const modelUrl = (telemetry && telemetry.modelUrl) ? telemetry.modelUrl : "./output.stl";
+      const modelName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
+      await loadSampleModel(viewportContainer, modelUrl, modelName);
+    }
   }
 }
 
