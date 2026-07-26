@@ -387,21 +387,27 @@
 
       <div class="project-card">
         <div class="project-header">
-          <div class="project-status"><span class="status-dot"></span> IN LABS</div>
+          <div class="project-status"><span class="status-dot"></span> AUTHENTICATED LAB STREAM</div>
         </div>
         <h3 class="project-title">3D Printing &amp; Physical Computing</h3>
-        <p class="project-desc">Custom CAD modeling, enclosure design, and micro-controller hardware integration. Rapid prototyping custom physical parts and micro-electronic sensor enclosures (project details TBD).</p>
-        <div class="project-code"><span class="c">// hardware/sensor.ino — micro-controller driver</span>
-<span class="k">void</span> <span class="f">setup</span>() {
-  Serial.<span class="f">begin</span>(<span class="n">115200</span>);
-  pinMode(LED_BUILTIN, OUTPUT);
-  <span class="c">// sensor hardware init TBD</span>
+        <p class="project-desc">Real-time Bambu Lab telemetry dashboard, container stream ingestion, and interactive 360° Three.js CAD model viewer (.stl &amp; .3mf) with AWS S3 telemetry archive.</p>
+        <div class="project-code"><span class="c">// subdomains/3dprinting/printing-loader.js — 3D CAD &amp; stream pipeline</span>
+<span class="k">const</span> telemetry <span class="b">=</span> <span class="k">await</span> <span class="f">fetchPrinterTelemetry</span>();
+<span class="k">if</span> (telemetry?.status <span class="b">===</span> <span class="s">"PRINTING"</span> &amp;&amp; telemetry?.streamUrl) {
+  <span class="f">mountStreamContainer</span>(telemetry.streamUrl);
+} <span class="k">else</span> {
+  <span class="k">await</span> <span class="f">mountInteractiveCADViewer</span>(telemetry.modelUrl);
 }</div>
         <div class="project-pills">
-          <span class="tech-pill">CAD / Fusion 360</span>
-          <span class="tech-pill">3D Printing</span>
-          <span class="tech-pill">ESP32 / C++</span>
-          <span class="tech-pill">Physical Computing</span>
+          <span class="tech-pill">Bambu Lab CoreXY</span>
+          <span class="tech-pill">Three.js / WebGL</span>
+          <span class="tech-pill">AWS S3 / CloudFront</span>
+          <span class="tech-pill">Container RTSP Stream</span>
+          <span class="tech-pill">CAD (STL / 3MF)</span>
+        </div>
+        <div class="project-links-wrap" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <a href="https://github.com/chrispivonka/chrispivonka.com/tree/main/subdomains/3dprinting" target="_blank" rel="noopener noreferrer" class="project-link">view_code() →</a>
+          <div class="project-link" style="color: var(--text-muted); font-size: 0.72rem; cursor: default;"><i class="bi bi-shield-lock-fill"></i> unlisted_route // auth_required</div>
         </div>
       </div>
     </div>
