@@ -17,7 +17,9 @@ async function fetchPrinterTelemetry() {
     const res = await fetch(PRINTING_CONFIG.telemetryUrl || "./printer-status.json", {
       cache: "no-store"
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return null;
+    }
     return await res.json();
   } catch {
     return null;
@@ -107,7 +109,9 @@ function parse3MFToGroup(arrayBuffer) {
 
 async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
   cleanupThreeScene();
-  if (!container) return;
+  if (!container) {
+    return;
+  }
   currentViewMode = "cad";
 
   const is3MF = fileName.toLowerCase().endsWith(".3mf");
@@ -119,7 +123,7 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
       <span>Model: <strong>${fileName}</strong> (${is3MF ? "3MF Package" : "STL Mesh"})</span>
       <button id="toggle-wireframe-btn" style="background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); padding:2px 6px; border-radius:3px; cursor:pointer; font-size:0.65rem;">Toggle Wireframe</button>
       <label for="stl-file-input" style="background:var(--cyan); color:#000; border:none; padding:2px 8px; border-radius:3px; cursor:pointer; font-weight:600; font-size:0.65rem;">Load STL / 3MF File...</label>
-      ${userModeOverride ? `<button id="switch-to-stream-btn" style="background:rgba(63,185,80,0.2); color:var(--green); border:1px solid rgba(63,185,80,0.4); padding:2px 8px; border-radius:3px; cursor:pointer; font-size:0.65rem;">● Return to Live Stream</button>` : ''}
+      ${userModeOverride ? "<button id=\"switch-to-stream-btn\" style=\"background:rgba(63,185,80,0.2); color:var(--green); border:1px solid rgba(63,185,80,0.4); padding:2px 8px; border-radius:3px; cursor:pointer; font-size:0.65rem;\">● Return to Live Stream</button>" : ""}
     </div>
   `;
 
@@ -196,7 +200,7 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
   scene.add(dirLight2);
 
   let modelGroup = new THREE.Group();
-  let materialsList = [];
+  const materialsList = [];
 
   if (is3MF) {
     try {
@@ -259,7 +263,9 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
     toggleBtn.addEventListener("click", () => {
       isWire = !isWire;
       materialsList.forEach((m) => {
-        if (m) m.wireframe = isWire;
+        if (m) {
+          m.wireframe = isWire;
+        }
       });
       toggleBtn.textContent = isWire ? "Solid View" : "Toggle Wireframe";
     });
@@ -278,7 +284,9 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
 
   // Window Resize
   const onResize = () => {
-    if (!container || container.clientWidth === 0) return;
+    if (!container || container.clientWidth === 0) {
+      return;
+    }
     const w = container.clientWidth;
     const h = container.clientHeight;
     camera.aspect = w / h;
@@ -291,7 +299,9 @@ async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model Fil
 async function loadSampleModel(container, modelUrl = "./output.stl", fileName = "output.stl") {
   try {
     const res = await fetch(modelUrl);
-    if (!res.ok) throw new Error("Failed to fetch model");
+    if (!res.ok) {
+      throw new Error("Failed to fetch model");
+    }
     const buffer = await res.arrayBuffer();
     await render3DArrayBuffer(container, buffer, fileName);
   } catch (err) {
@@ -300,7 +310,9 @@ async function loadSampleModel(container, modelUrl = "./output.stl", fileName = 
 }
 
 function setupDragAndDrop(container) {
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   container.addEventListener("dragover", (e) => {
     e.preventDefault();
@@ -332,7 +344,9 @@ function setupDragAndDrop(container) {
 
 function renderLiveJobCard(telemetry) {
   const container = document.getElementById("live-job-container");
-  if (!container) return;
+  if (!container) {
+    return;
+  }
 
   if (!telemetry || telemetry.status !== "PRINTING") {
     container.style.display = "none";
@@ -367,7 +381,9 @@ function renderLiveJobCard(telemetry) {
 
 function renderSpecs(telemetry) {
   const specsContainer = document.getElementById("printing-specs");
-  if (!specsContainer) return;
+  if (!specsContainer) {
+    return;
+  }
 
   const temps = telemetry && telemetry.temps ? telemetry.temps : {};
   const activeStatus = telemetry && telemetry.status ? telemetry.status : PRINTING_CONFIG.status;
@@ -383,24 +399,26 @@ function renderSpecs(telemetry) {
   specsContainer.innerHTML = specsList.map(spec => `
     <div class="spec-card">
       <span class="spec-label">${spec.label}</span>
-      <span class="spec-val" style="${spec.label === 'status' && activeStatus === 'PRINTING' ? 'color: var(--green);' : ''}">${spec.value}</span>
+      <span class="spec-val" style="${spec.label === "status" && activeStatus === "PRINTING" ? "color: var(--green);" : ""}">${spec.value}</span>
     </div>
   `).join("");
 }
 
 function renderAmsSlots(telemetry) {
   const amsContainer = document.getElementById("ams-slots");
-  if (!amsContainer) return;
+  if (!amsContainer) {
+    return;
+  }
 
   const amsData = (telemetry && telemetry.ams) || PRINTING_CONFIG.bambuStats.amsSlots;
 
   amsContainer.innerHTML = amsData.map(slot => {
     const isActive = slot.active === true;
     return `
-      <div class="ams-slot ${isActive ? 'active-slot' : ''}">
+      <div class="ams-slot ${isActive ? "active-slot" : ""}">
         <span class="ams-color-dot" style="background: ${slot.color}; border: 1px solid var(--border-bright);"></span>
         <span class="ams-slot-num">Slot ${slot.slot}:</span>
-        <span class="ams-mat-name">${slot.material}${isActive ? ' (ACTIVE)' : ''}</span>
+        <span class="ams-mat-name">${slot.material}${isActive ? " (ACTIVE)" : ""}</span>
       </div>
     `;
   }).join("");
@@ -408,7 +426,9 @@ function renderAmsSlots(telemetry) {
 
 function renderPrintHistory(telemetry) {
   const historyContainer = document.getElementById("print-history-table");
-  if (!historyContainer) return;
+  if (!historyContainer) {
+    return;
+  }
 
   const history = (telemetry && telemetry.printHistory) || [
     { id: "job-112", name: "ESP32_Environmental_Sensor_Housing.gcode", modelName: "output.stl", modelUrl: "./output.stl", material: "PETG Charcoal", printTime: "1h 26m", filamentWeight: "38.4g", completedAt: "2026-07-21 18:40", status: "COMPLETED" },
@@ -417,7 +437,7 @@ function renderPrintHistory(telemetry) {
   ];
 
   historyContainer.innerHTML = history.map(item => `
-    <tr class="history-row" data-model-url="${item.modelUrl || './output.stl'}" data-model-name="${item.modelName || item.name}">
+    <tr class="history-row" data-model-url="${item.modelUrl || "./output.stl"}" data-model-name="${item.modelName || item.name}">
       <td class="h-name"><i class="bi bi-file-earmark-code" style="color: var(--cyan);"></i> ${item.name}</td>
       <td class="h-mat">${item.material}</td>
       <td class="h-time">${item.printTime}</td>
@@ -451,7 +471,9 @@ function renderPrintHistory(telemetry) {
 
 function renderProjects() {
   const projectsContainer = document.getElementById("printing-projects");
-  if (!projectsContainer) return;
+  if (!projectsContainer) {
+    return;
+  }
 
   projectsContainer.innerHTML = PRINTING_CONFIG.projects.map(p => `
     <div class="project-card-sub">
@@ -468,7 +490,9 @@ function renderProjects() {
 
 function setupFileInputHandler(container) {
   const fileInput = document.getElementById("stl-file-input");
-  if (!fileInput) return;
+  if (!fileInput) {
+    return;
+  }
 
   fileInput.addEventListener("change", (e) => {
     const files = e.target.files;
@@ -493,9 +517,9 @@ function renderStreamFeed(container, telemetry) {
   container.innerHTML = `
     <div style="width:100%; height:100%; position:relative; background:#000;">
       ${isIframe
-        ? `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`
-        : `<img src="${telemetry.snapshotUrl}" alt="Live Printer Camera Snapshot" style="width:100%; height:100%; object-fit:contain;" />`
-      }
+    ? `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`
+    : `<img src="${telemetry.snapshotUrl}" alt="Live Printer Camera Snapshot" style="width:100%; height:100%; object-fit:contain;" />`
+}
       <div style="position:absolute; top:12px; right:16px; font-family:var(--mono); font-size:0.68rem; color:var(--green); background:rgba(10,14,23,0.85); border:1px solid rgba(63,185,80,0.4); padding:6px 12px; border-radius:4px; display:flex; align-items:center; gap:0.6rem; z-index:10;">
         <span>${badgeText}</span>
         <button id="switch-to-cad-btn" style="background:var(--bg-elevated); color:var(--cyan); border:1px solid var(--border); padding:2px 8px; border-radius:3px; cursor:pointer; font-size:0.65rem;">View 3D CAD Model</button>
@@ -551,6 +575,62 @@ async function updateTelemetryUI() {
   }
 }
 
+function updateClock() {
+  const now = new Date();
+  const t = now.toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false, timeZone: "America/Denver"
+  });
+  const el = document.getElementById("live-clock");
+  if (el) {
+    el.textContent = `${t} MST`;
+  }
+}
+
+function updateUptime(bootTime) {
+  const diffMs = Math.max(0, Date.now() - bootTime);
+  const totalSec = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+
+  let str = "uptime: ";
+  if (days > 0) {
+    str += `${days}d `;
+  }
+  if (hours > 0 || days > 0) {
+    str += `${hours}h `;
+  }
+  str += `${minutes}m ${seconds}s`;
+
+  const upEl = document.getElementById("uptime-counter");
+  if (upEl) {
+    upEl.textContent = str;
+  }
+}
+
+function initClockAndUptime() {
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  let bootTimeStr = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("container_boot_time") : null;
+  if (!bootTimeStr) {
+    bootTimeStr = (Date.now() - 240000).toString();
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("container_boot_time", bootTimeStr);
+    }
+  }
+  const bootTime = parseInt(bootTimeStr, 10);
+  updateUptime(bootTime);
+  setInterval(() => updateUptime(bootTime), 1000);
+
+  const yr = document.getElementById("current-year");
+  if (yr) {
+    yr.textContent = new Date().getFullYear();
+  }
+}
+
 function init() {
   const viewportContainer = document.getElementById("printing-container");
   setupDragAndDrop(viewportContainer);
@@ -558,8 +638,11 @@ function init() {
 
   renderProjects();
   updateTelemetryUI();
+  initClockAndUptime();
 
-  if (pollTimer) clearInterval(pollTimer);
+  if (pollTimer) {
+    clearInterval(pollTimer);
+  }
   pollTimer = setInterval(updateTelemetryUI, 5000);
 }
 
