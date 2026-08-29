@@ -1,0 +1,12 @@
+services:
+  bambu-publisher:
+    build: .
+    image: 3dprinting-bambu-publisher
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - bambu-publisher-data:/data
+
+volumes:
+  bambu-publisher-data:

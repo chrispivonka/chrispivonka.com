@@ -71,7 +71,7 @@ PUBLISH_INTERVAL_SEC = 3
 PUSHALL_INTERVAL_SEC = 120  # re-request full state periodically in case a delta was missed
 MAX_HISTORY = 20
 
-STATE_FILE = Path(__file__).with_name(".bambu-publisher-state.json")
+STATE_FILE = Path(os.environ.get("STATE_FILE_PATH", str(Path(__file__).with_name(".bambu-publisher-state.json"))))
 
 GCODE_STATE_MAP = {
     "RUNNING": "PRINTING",

@@ -332,8 +332,46 @@ LAN device in the next step. Rotate these periodically
 
 ## 6. Run the Telemetry Publisher on Your LAN
 
-On a Raspberry Pi, NAS, or other always-on machine that can reach the
-printer's IP:
+This needs to run continuously on a device that can reach the printer's IP
+— a Raspberry Pi, NAS, or an existing always-on desktop, anything on the
+same LAN. Pick whichever option matches your hardware:
+
+- **Option A (Docker)** — if you already have an always-on machine
+  (e.g. a secondary desktop), this is the easier path: no Python version
+  wrangling, restarts on crash/reboot automatically, easy to update.
+- **Option B (bare-metal + systemd)** — for a dedicated Raspberry Pi with
+  no Docker, or if you'd rather manage it as a native service.
+
+Either way, find the printer's LAN details first: **Settings (gear) >
+Network > LAN Only Mode** on the printer's touchscreen for the IP and
+access code; the serial number is on the unit and in **Settings > Device**.
+
+### Option A: Docker
+
+```bash
+git clone <this repo>
+cd chrispivonka.com/subdomains/3dprinting
+
+cp .env.example .env
+# edit .env: BAMBU_IP, BAMBU_SERIAL, BAMBU_ACCESS_CODE,
+# and the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from step 5
+
+docker compose up -d --build
+docker compose logs -f
+```
+
+You should see `Connected to printer MQTT broker` and periodic `Published:
+status=... progress=...%` lines. Check `https://3dprinting.chrispivonka.com`
+— the live job card and specs should update within a few seconds.
+
+The container restarts automatically (`restart: unless-stopped`) on crash
+or host reboot. Print history persists across restarts in the
+`bambu-publisher-data` Docker volume — don't `docker compose down -v`
+unless you want to wipe it.
+
+To update after pulling new code: `docker compose up -d --build`.
+
+### Option B: Bare-metal + systemd
 
 ```bash
 git clone <this repo>  # or just copy subdomains/3dprinting/publish-to-s3.py + requirements.txt
@@ -344,10 +382,6 @@ pip install -r requirements.txt
 aws configure   # paste the IAM access key/secret from step 5, region us-east-1
 ```
 
-Find the printer's LAN details: **Settings (gear) > Network > LAN Only
-Mode** on the printer's touchscreen for the IP and access code; the serial
-number is on the unit and in **Settings > Device**.
-
 Test it directly first:
 
 ```bash
@@ -357,11 +391,8 @@ python3 publish-to-s3.py \
   --access-code 12345678
 ```
 
-You should see `Connected to printer MQTT broker` and periodic `Published:
-status=... progress=...%` lines. Check `https://3dprinting.chrispivonka.com`
-— the live job card and specs should update within a few seconds.
-
-### Run it as a systemd service
+You should see the same `Connected` / `Published` log lines as above. Once
+confirmed, run it as a systemd service.
 
 `/etc/systemd/system/bambu-publisher.service`:
 
@@ -411,7 +442,7 @@ journalctl -u bambu-publisher -f
 - [ ] `curl -I https://3dprinting.chrispivonka.com` shows HSTS, CSP, X-Frame-Options headers
 - [ ] Browser console shows no CSP violations (check the import map and Three.js loaded)
 - [ ] Direct S3 bucket URL returns 403 (private bucket, CloudFront-OAC-only)
-- [ ] `bambu-publisher` service is active and printer-status.json updates live while a print runs
+- [ ] Publisher (Docker container or systemd service) is running and printer-status.json updates live while a print runs
 - [ ] Starting/finishing a print on the printer updates the live job card and print history within ~5s / on next poll
 - [ ] `dig CAA 3dprinting.chrispivonka.com` shows the amazon.com restriction
 - [ ] WAF logs appear in CloudWatch under `aws-waf-logs-3dprinting.chrispivonka.com`
