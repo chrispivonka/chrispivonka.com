@@ -1,6 +1,6 @@
 {
   "name": "chrispivonka-com",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "description": "Personal portfolio website with secure contact form and CI/CD pipeline",
   "type": "module",
   "scripts": {
@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.9.1",
+    "eslint": "^10.8.0",
     "globals": "^17.11.0",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1"
