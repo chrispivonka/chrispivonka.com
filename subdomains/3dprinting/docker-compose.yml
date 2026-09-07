@@ -1,3 +1,9 @@
+# Before starting bambu-publisher in cloud mode (the default), run the
+# login helper once, interactively, to authenticate:
+#   docker compose run --rm --entrypoint python3 bambu-publisher bambu_cloud_login.py
+# This writes a token into the bambu-publisher-data volume, which the main
+# service then reads on startup. Re-run it whenever publish-to-s3.py logs a
+# token-expired error (~90 day intervals).
 services:
   bambu-publisher:
     build: .

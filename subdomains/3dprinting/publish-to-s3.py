@@ -2,30 +2,48 @@
 """
 Bambu Lab Printer -> AWS S3 Telemetry Publisher
 
-Connects to a Bambu Lab printer's local MQTT broker (LAN-only mode) and keeps
-printer-status.json in S3 up to date in near-real-time for 3dprinting.chrispivonka.com.
+Connects to a Bambu Lab printer's MQTT broker and keeps printer-status.json
+in S3 up to date in near-real-time for 3dprinting.chrispivonka.com.
 
-This talks to the printer directly over your LAN — it must run on a device
-that can reach the printer's IP (a Raspberry Pi, NAS, or home server on the
-same network), not in AWS/GitHub Actions. See infra/3dprinting/SETUP.md for
-how to run this as a long-lived service.
+Supports two connection modes:
+
+  cloud (default) — connects via Bambu's cloud MQTT broker using your Bambu
+    account. Use this if you want to keep the printer on Bambu Cloud mode
+    (Bambu Handy, remote access, etc.) instead of switching to LAN-only +
+    Developer Mode. Requires running bambu_cloud_login.py once first (see
+    below) — no live 3D model preview during printing, since that needs
+    local FTPS access which cloud mode doesn't have.
+
+  lan — connects directly to the printer's local MQTT broker. Requires
+    LAN-only mode + Developer Mode enabled on the printer (which disconnects
+    it from Bambu Cloud entirely — the two are mutually exclusive). Supports
+    the live 3D model preview via local FTPS.
+
+This must run on a device that can reach the printer (LAN mode) or the
+internet (cloud mode) continuously — a Raspberry Pi, NAS, or home server,
+not in AWS/GitHub Actions. See infra/3dprinting/SETUP.md.
 
 Requirements:
   pip install -r requirements.txt   # paho-mqtt, boto3
 
-Usage:
-  python3 publish-to-s3.py \\
-    --host 192.168.1.50 --serial 01P00A000000000 --access-code 12345678 \\
-    --stack-name printing3d
+Usage (cloud mode):
+  python3 bambu_cloud_login.py            # one-time, interactive, handles 2FA
+  python3 publish-to-s3.py --mode cloud --serial 01P00A000000000
 
-  Or via env vars: BAMBU_IP, BAMBU_SERIAL, BAMBU_ACCESS_CODE, AWS_REGION,
-  PRINTING_S3_BUCKET (skips the CloudFormation stack lookup if set).
+Usage (lan mode):
+  python3 publish-to-s3.py --mode lan \\
+    --host 192.168.1.50 --serial 01P00A000000000 --access-code 12345678
 
-Where to find --host / --serial / --access-code on the printer:
+  Or via env vars: BAMBU_CONNECTION_MODE, BAMBU_IP, BAMBU_SERIAL,
+  BAMBU_ACCESS_CODE, AWS_REGION, PRINTING_S3_BUCKET (skips the
+  CloudFormation stack lookup if set).
+
+Where to find --host / --serial / --access-code on the printer (lan mode):
   Settings (gear icon) > Network > LAN Only Mode
   - IP Address is --host
   - Access Code is --access-code
-  - Serial number is printed on the unit and in Settings > Device
+  - Serial number is printed on the unit and in Settings > Device (needed
+    in both modes)
 
 Scope note: this publishes telemetry (status, progress, temps, AMS, print
 history) only. Live video is a separate, unimplemented project (an
@@ -66,7 +84,12 @@ log = logging.getLogger("bambu-publisher")
 
 MQTT_PORT = 8883
 FTPS_PORT = 990
-MQTT_USERNAME = "bblp"
+LAN_MQTT_USERNAME = "bblp"
+CLOUD_MQTT_HOST = "us.mqtt.bambulab.com"
+DEFAULT_CLOUD_TOKEN_PATH = Path(os.environ.get(
+    "BAMBU_CLOUD_TOKEN_PATH",
+    str(Path(__file__).with_name(".bambu-cloud-token.json")),
+))
 PUBLISH_INTERVAL_SEC = 3
 PUSHALL_INTERVAL_SEC = 120  # re-request full state periodically in case a delta was missed
 MAX_HISTORY = 20
@@ -239,6 +262,42 @@ def resolve_bucket(stack_name, region):
     raise RuntimeError(f"ContentBucketName output not found on stack '{stack_name}'")
 
 
+def load_cloud_token(token_path):
+    """
+    Load the cloud access token saved by bambu_cloud_login.py. Read once at
+    startup — if you re-run bambu_cloud_login.py after a token expires,
+    restart this process (`docker compose restart bambu-publisher`) to pick
+    up the new one.
+
+    Returns (username, password) for MQTT auth, or None if the token file
+    is missing, unparseable, or past its documented ~90-day lifetime.
+    """
+    if not token_path.exists():
+        log.error(
+            "No cloud token found at %s — run: python3 bambu_cloud_login.py",
+            token_path,
+        )
+        return None
+    try:
+        data = json.loads(token_path.read_text())
+        access_token = data["access_token"]
+        uid = data["uid"]
+        obtained_at = data["obtained_at"]
+        expires_in = data["expires_in"]
+    except (json.JSONDecodeError, KeyError, OSError) as e:
+        log.error("Cloud token file at %s is invalid (%s) — re-run bambu_cloud_login.py", token_path, e)
+        return None
+
+    if time.time() > obtained_at + expires_in:
+        log.error(
+            "Cloud token expired (obtained %s, valid ~90 days) — run: python3 bambu_cloud_login.py",
+            datetime.fromtimestamp(obtained_at, tz=timezone.utc).isoformat(),
+        )
+        return None
+
+    return f"u_{uid}", access_token
+
+
 def try_fetch_current_3mf(host, access_code, gcode_file):
     """
     Best-effort: pull the active print's .3mf project file off the printer's
@@ -254,7 +313,7 @@ def try_fetch_current_3mf(host, access_code, gcode_file):
     try:
         ftps = FTP_TLS()
         ftps.connect(host, FTPS_PORT, timeout=10)
-        ftps.login(MQTT_USERNAME, access_code)
+        ftps.login(LAN_MQTT_USERNAME, access_code)
         ftps.prot_p()
         for directory in ("/", "/cache"):
             try:
@@ -276,13 +335,15 @@ def try_fetch_current_3mf(host, access_code, gcode_file):
 
 
 class BambuMQTTPublisher:
-    def __init__(self, host, serial, access_code, bucket, region, youtube_video_id=None):
+    def __init__(self, mode, host, serial, bucket, region, access_code=None,
+                 cloud_username=None, cloud_password=None, youtube_video_id=None):
         if boto3 is None or mqtt is None:
             raise SystemExit("Missing dependencies. Run: pip install -r requirements.txt")
 
+        self.mode = mode
         self.host = host
         self.serial = serial
-        self.access_code = access_code
+        self.access_code = access_code  # lan mode only — also used for FTPS model fetch
         self.bucket = bucket
         self.s3 = boto3.client("s3", region_name=region)
         stream_url = (
@@ -294,25 +355,38 @@ class BambuMQTTPublisher:
         self._stop = False
 
         self.client = mqtt.Client(client_id=f"chrispivonka-3dprinting-{uuid.uuid4().hex[:8]}")
-        self.client.username_pw_set(MQTT_USERNAME, access_code)
-        # Bambu printers use a self-signed cert in LAN-only mode — there's no
-        # CA to validate against, so we trust-on-connect to the configured IP.
-        self.client.tls_set(cert_reqs=ssl.CERT_NONE)
-        self.client.tls_insecure_set(True)
+        if mode == "lan":
+            self.client.username_pw_set(LAN_MQTT_USERNAME, access_code)
+            # Bambu printers use a self-signed cert in LAN-only mode — there's
+            # no CA to validate against, so we trust-on-connect to the IP.
+            self.client.tls_set(cert_reqs=ssl.CERT_NONE)
+            self.client.tls_insecure_set(True)
+        else:
+            self.client.username_pw_set(cloud_username, cloud_password)
+            # Bambu's cloud broker has a real, publicly-trusted certificate —
+            # verify it normally, unlike the LAN printer's self-signed one.
+            self.client.tls_set()
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.client.on_disconnect = self._on_disconnect
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc != 0:
-            log.error("MQTT connect failed (rc=%s) — check IP/serial/access code", rc)
+            if self.mode == "lan":
+                log.error("MQTT connect failed (rc=%s) — check IP/serial/access code", rc)
+            else:
+                log.error(
+                    "MQTT connect failed (rc=%s) — cloud token may be invalid/expired, "
+                    "run: python3 bambu_cloud_login.py",
+                    rc,
+                )
             return
-        log.info("Connected to printer MQTT broker")
+        log.info("Connected to %s MQTT broker", self.mode)
         client.subscribe(f"device/{self.serial}/report")
         self._request_pushall()
 
     def _on_disconnect(self, client, userdata, rc):
-        log.warning("Disconnected from printer MQTT broker (rc=%s), will retry", rc)
+        log.warning("Disconnected from %s MQTT broker (rc=%s), will retry", self.mode, rc)
 
     def _request_pushall(self):
         topic = f"device/{self.serial}/request"
@@ -353,6 +427,8 @@ class BambuMQTTPublisher:
             log.warning("Could not archive model for completed job %s: %s", entry["id"], e)
 
     def _maybe_fetch_model(self):
+        if self.mode != "lan":
+            return  # FTPS model fetch needs local network access; not available via cloud
         gcode_file = self.state.raw.get("gcode_file")
         if not gcode_file or gcode_file == self._last_model_fetch_file:
             return
@@ -408,23 +484,42 @@ class BambuMQTTPublisher:
 
 def main():
     parser = argparse.ArgumentParser(description="Publish live Bambu Lab telemetry to S3")
-    parser.add_argument("--host", default=os.environ.get("BAMBU_IP"), help="Printer LAN IP address")
-    parser.add_argument("--serial", default=os.environ.get("BAMBU_SERIAL"), help="Printer serial number")
-    parser.add_argument("--access-code", default=os.environ.get("BAMBU_ACCESS_CODE"), help="LAN-only mode access code")
+    parser.add_argument("--mode", choices=["cloud", "lan"], default=os.environ.get("BAMBU_CONNECTION_MODE", "cloud"),
+                         help="cloud: via Bambu account + bambu_cloud_login.py (default). lan: direct to printer, requires LAN-only + Developer Mode.")
+    parser.add_argument("--host", default=os.environ.get("BAMBU_IP"), help="Printer LAN IP address (lan mode only)")
+    parser.add_argument("--serial", default=os.environ.get("BAMBU_SERIAL"), help="Printer serial number (both modes)")
+    parser.add_argument("--access-code", default=os.environ.get("BAMBU_ACCESS_CODE"), help="LAN-only mode access code (lan mode only)")
+    parser.add_argument("--cloud-token-path", default=str(DEFAULT_CLOUD_TOKEN_PATH), help="Path to the token saved by bambu_cloud_login.py (cloud mode only)")
     parser.add_argument("--stack-name", default=os.environ.get("PRINTING_STACK_NAME", "printing3d"), help="CloudFormation stack name to resolve the bucket from")
     parser.add_argument("--bucket", default=None, help="S3 bucket (skips CloudFormation lookup)")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-east-1"), help="AWS region")
     parser.add_argument("--youtube-video-id", default=os.environ.get("YOUTUBE_VIDEO_ID"), help="YouTube Live video ID (from the same persistent stream the camera-relay pushes to) — embedded as the live feed on the page")
     args = parser.parse_args()
 
-    missing = [name for name, val in (("--host", args.host), ("--serial", args.serial), ("--access-code", args.access_code)) if not val]
-    if missing:
-        parser.error(f"missing required value(s): {', '.join(missing)} (flag or matching env var)")
+    if not args.serial:
+        parser.error("missing required value: --serial (flag or BAMBU_SERIAL env var)")
+
+    cloud_username = cloud_password = None
+    if args.mode == "lan":
+        missing = [name for name, val in (("--host", args.host), ("--access-code", args.access_code)) if not val]
+        if missing:
+            parser.error(f"lan mode missing required value(s): {', '.join(missing)} (flag or matching env var)")
+    else:
+        token = load_cloud_token(Path(args.cloud_token_path))
+        if not token:
+            raise SystemExit(1)  # load_cloud_token already logged a specific, actionable error
+        cloud_username, cloud_password = token
+        args.host = CLOUD_MQTT_HOST
 
     bucket = args.bucket or resolve_bucket(args.stack_name, args.region)
-    log.info("Publishing telemetry for printer %s -> s3://%s", args.serial, bucket)
+    log.info("Publishing telemetry for printer %s -> s3://%s (mode=%s)", args.serial, bucket, args.mode)
 
-    publisher = BambuMQTTPublisher(args.host, args.serial, args.access_code, bucket, args.region, youtube_video_id=args.youtube_video_id)
+    publisher = BambuMQTTPublisher(
+        args.mode, args.host, args.serial, bucket, args.region,
+        access_code=args.access_code,
+        cloud_username=cloud_username, cloud_password=cloud_password,
+        youtube_video_id=args.youtube_video_id,
+    )
     signal.signal(signal.SIGTERM, publisher.stop)
     signal.signal(signal.SIGINT, publisher.stop)
     publisher.run()

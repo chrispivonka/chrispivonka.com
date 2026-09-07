@@ -407,8 +407,8 @@ sam deploy --parameter-overrides HostedZoneId=YOUR_ZONE_ID
 
 ## 6. IAM User for the Telemetry Publisher
 
-`publish-to-s3.py` runs on a device on your LAN (see step 7) and needs
-write access to two S3 prefixes in the private content bucket. It does
+`publish-to-s3.py` runs on an always-on device you control (see step 7)
+and needs write access to two S3 prefixes in the private content bucket. It does
 **not** get GitHub's OIDC role — that only works for GitHub Actions. Create
 a dedicated, narrowly-scoped IAM user instead:
 
@@ -456,122 +456,68 @@ LAN device in the next step. Rotate these periodically
 
 ---
 
-## 7. Run the Telemetry Publisher on Your LAN
+## 7. Run the Telemetry Publisher
 
-This needs to run continuously on a device that can reach the printer's IP
-— a Raspberry Pi, NAS, or an existing always-on desktop, anything on the
-same LAN. Pick whichever option matches your hardware:
-
-- **Option A (Docker)** — if you already have an always-on machine
-  (e.g. a secondary desktop), this is the easier path: no Python version
-  wrangling, restarts on crash/reboot automatically, easy to update.
-- **Option B (bare-metal + systemd)** — for a dedicated Raspberry Pi with
-  no Docker, or if you'd rather manage it as a native service.
-
-Either way, find the printer's LAN details first: **Settings (gear) >
-Network > LAN Only Mode** on the printer's touchscreen for the IP and
-access code; the serial number is on the unit and in **Settings > Device**.
-
-### Option A: Docker
+This needs to run continuously on a device that stays powered on — a
+Raspberry Pi, NAS, or an existing always-on desktop. Docker is the
+supported path (works identically on any of them):
 
 ```bash
 git clone <this repo>
 cd chrispivonka.com/subdomains/3dprinting
 
 cp .env.example .env
-# edit .env: BAMBU_IP, BAMBU_SERIAL, BAMBU_ACCESS_CODE,
-# the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from step 6,
-# and YOUTUBE_STREAM_KEY / YOUTUBE_VIDEO_ID from step 8 (skip step 8
-# for now and leave those blank if you just want telemetry first —
-# the camera-relay container will simply retry/fail harmlessly)
+# edit .env: BAMBU_SERIAL, BAMBU_CLOUD_EMAIL, the AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY from step 6, and YOUTUBE_STREAM_KEY /
+# YOUTUBE_VIDEO_ID from step 8 (skip step 8 for now and leave those
+# blank if you just want telemetry first)
 
 docker compose up -d --build
-docker compose logs -f
+
+# One-time, interactive — authenticates with your Bambu account.
+# 2FA on this account means you'll need to re-run this roughly every
+# 90 days when publish-to-s3.py logs a token-expired error.
+docker compose run --rm --entrypoint python3 bambu-publisher bambu_cloud_login.py
+
+docker compose restart bambu-publisher
+docker compose logs -f bambu-publisher
 ```
 
-`docker compose` starts two containers: `bambu-publisher` (telemetry ->
-S3) and `camera-relay` (printer camera -> YouTube Live, see step 8). You
-should see `Connected to printer MQTT broker` and periodic `Published:
-status=... progress=...%` lines from the former. Check
+You should see `Connected to cloud MQTT broker` and periodic `Published:
+status=... progress=...%` lines. Check
 `https://3dprinting.chrispivonka.com` — the live job card and specs should
 update within a few seconds.
 
-Both containers restart automatically (`restart: unless-stopped`) on crash
-or host reboot. Print history persists across restarts in the
-`bambu-publisher-data` Docker volume — don't `docker compose down -v`
-unless you want to wipe it.
+This mode keeps the printer on Bambu Cloud (Bambu Handy, remote access,
+etc. all keep working) — trade-off is no live 3D model preview during
+printing, since that specific feature needs local FTPS access. Print
+history and everything else works the same either way.
+
+The container restarts automatically (`restart: unless-stopped`) on crash
+or host reboot — but note it won't survive a *token* expiring, only
+process/host restarts. Print history and the cloud token persist across
+restarts in the `bambu-publisher-data` Docker volume — don't `docker
+compose down -v` unless you want to wipe both.
 
 To update after pulling new code: `docker compose up -d --build`.
 
-### Option B: Bare-metal + systemd
+### Alternative: LAN-only mode
 
-```bash
-git clone <this repo>  # or just copy subdomains/3dprinting/publish-to-s3.py + requirements.txt
-cd chrispivonka.com/subdomains/3dprinting
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
-aws configure   # paste the IAM access key/secret from step 6, region us-east-1
-```
-
-Test it directly first:
-
-```bash
-python3 publish-to-s3.py \
-  --host 192.168.1.50 \
-  --serial 01P00A000000000 \
-  --access-code 12345678
-```
-
-You should see the same `Connected` / `Published` log lines as above. Once
-confirmed, run it as a systemd service.
-
-`/etc/systemd/system/bambu-publisher.service`:
-
-```ini
-[Unit]
-Description=Bambu Lab telemetry publisher for 3dprinting.chrispivonka.com
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/chrispivonka.com/subdomains/3dprinting
-EnvironmentFile=/home/pi/bambu-publisher.env
-ExecStart=/home/pi/chrispivonka.com/subdomains/3dprinting/venv/bin/python3 publish-to-s3.py
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`/home/pi/bambu-publisher.env` (keep this file `chmod 600` — it holds the
-printer's access code and AWS credentials):
+If you'd rather disconnect the printer from Bambu Cloud entirely in
+exchange for the live 3D model preview and no 90-day re-auth cadence,
+enable **LAN-only mode + Developer Mode** on the printer instead
+(**Settings > Network**) — note this requires Developer Mode, which
+Bambu Lab does not allow while cloud-connected, so you lose Bambu Handy
+and remote access. Then in `.env`:
 
 ```
-BAMBU_IP=192.168.1.50
-BAMBU_SERIAL=01P00A000000000
-BAMBU_ACCESS_CODE=12345678
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=us-east-1
-YOUTUBE_VIDEO_ID=...
+BAMBU_CONNECTION_MODE=lan
+BAMBU_IP=<printer's LAN IP>
+BAMBU_ACCESS_CODE=<from Settings > Network > LAN Only Mode>
 ```
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now bambu-publisher
-sudo systemctl status bambu-publisher
-journalctl -u bambu-publisher -f
-```
-
-Note: the camera relay (step 8) currently only has a Docker setup
-(`camera-relay/`). To run it bare-metal instead, install `ffmpeg` and run
-`camera-relay/relay.sh` directly with `BAMBU_IP`, `BAMBU_ACCESS_CODE`, and
-`YOUTUBE_STREAM_KEY` set — wrap it in its own systemd unit the same way as
-above.
+No `bambu_cloud_login.py` step needed in this mode — `docker compose up
+-d --build` is sufficient once `.env` is filled in.
 
 ---
 
@@ -584,9 +530,17 @@ different proprietary protocol and aren't covered by this setup.)
 ### 8a. Enable the camera feed on the printer
 
 On the touchscreen: **Settings > Network**, toggle on **LAN Mode
-Liveview** (separate from LAN Only Mode, which you already enabled in
-step 7). This exposes the RTSPS stream at
+Liveview**. This exposes the RTSPS stream at
 `rtsps://bblp:<access_code>@<printer-ip>:322/streaming/live/1`.
+
+This needs the printer's local access code, same as LAN-only mode's — but
+based on available documentation this toggle is independent of whether
+LAN-only mode itself (which disconnects Bambu Cloud) is on. If you're on
+cloud mode for telemetry (step 7's default) and this toggle turns out to
+require LAN-only mode too on your firmware, that's a genuine conflict
+between "live video" and "keep cloud features" — not something either of
+us can configure around. Worth confirming on the touchscreen before
+building the rest of this out.
 
 ### 8b. Set up a YouTube Live stream
 
