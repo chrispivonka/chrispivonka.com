@@ -192,7 +192,10 @@ aws iam create-role \
         "lambda:AddPermission",
         "lambda:RemovePermission",
         "lambda:GetPolicy",
-        "lambda:EnableReplication*"
+        "lambda:EnableReplication*",
+        "lambda:TagResource",
+        "lambda:UntagResource",
+        "lambda:ListTags"
       ],
       "Resource": "arn:aws:lambda:us-east-1:*:function:printing3d-*"
     },
@@ -209,7 +212,11 @@ aws iam create-role \
         "iam:AttachRolePolicy",
         "iam:DetachRolePolicy",
         "iam:PassRole",
-        "iam:TagRole"
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies"
       ],
       "Resource": "arn:aws:iam::*:role/printing3d-*"
     },
