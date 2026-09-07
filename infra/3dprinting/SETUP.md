@@ -199,7 +199,6 @@ aws iam create-role \
       "Effect": "Allow",
       "Action": [
         "logs:CreateLogGroup",
-        "logs:DescribeLogGroups",
         "logs:PutRetentionPolicy",
         "logs:DeleteLogGroup"
       ],
@@ -211,7 +210,8 @@ aws iam create-role \
       "Action": [
         "logs:PutResourcePolicy",
         "logs:DeleteResourcePolicy",
-        "logs:DescribeResourcePolicies"
+        "logs:DescribeResourcePolicies",
+        "logs:DescribeLogGroups"
       ],
       "Resource": "*"
     },
