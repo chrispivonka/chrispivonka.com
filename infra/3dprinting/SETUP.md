@@ -201,12 +201,19 @@ aws iam create-role \
         "logs:CreateLogGroup",
         "logs:DescribeLogGroups",
         "logs:PutRetentionPolicy",
-        "logs:DeleteLogGroup",
+        "logs:DeleteLogGroup"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:*:log-group:aws-waf-logs-*"
+    },
+    {
+      "Sid": "WAFLogResourcePolicy",
+      "Effect": "Allow",
+      "Action": [
         "logs:PutResourcePolicy",
         "logs:DeleteResourcePolicy",
         "logs:DescribeResourcePolicies"
       ],
-      "Resource": "arn:aws:logs:us-east-1:*:log-group:aws-waf-logs-*"
+      "Resource": "*"
     },
     {
       "Sid": "WAFLoggingConfig",
