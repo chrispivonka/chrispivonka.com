@@ -320,7 +320,7 @@ Resources:
                 "logs:CreateLogStream",
                 "logs:PutLogEvents"
               ],
-              "Resource": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws-waf-logs-${DomainName}:*",
+              "Resource": "${WAFLogGroup.Arn}",
               "Condition": {
                 "ArnLike": {
                   "aws:SourceArn": "${WebACL.Arn}"
@@ -335,7 +335,7 @@ Resources:
     Properties:
       ResourceArn: !GetAtt WebACL.Arn
       LogDestinationConfigs:
-        - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws-waf-logs-${DomainName}"
+        - !GetAtt WAFLogGroup.Arn
       RedactedFields:
         - SingleHeader:
             Name: cookie
