@@ -23,7 +23,7 @@ jobs:
     name: Deploy 3D Printing Lab Infrastructure & Content
     env:
       AWS_REGION: us-east-1
-      SECRETS_REGION: us-east-1
+      SECRETS_REGION: us-west-2
 
     steps:
       - uses: actions/checkout@v7

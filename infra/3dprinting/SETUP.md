@@ -218,9 +218,9 @@ aws iam create-role \
       "Effect": "Allow",
       "Action": "secretsmanager:GetSecretValue",
       "Resource": [
-        "arn:aws:secretsmanager:us-east-1:*:secret:kittycam/oauth-*",
-        "arn:aws:secretsmanager:us-east-1:*:secret:kittycam/allowed-emails-*",
-        "arn:aws:secretsmanager:us-east-1:*:secret:3dprinting/*"
+        "arn:aws:secretsmanager:us-west-2:*:secret:kittycam/oauth-*",
+        "arn:aws:secretsmanager:us-west-2:*:secret:kittycam/allowed-emails-*",
+        "arn:aws:secretsmanager:us-west-2:*:secret:3dprinting/*"
       ]
     },
     {
@@ -356,11 +356,17 @@ existing one). Save.
 
 ### 4b. Create the cookie encryption key secret
 
+`kittycam/oauth` and `kittycam/allowed-emails` live in **us-west-2** (not
+us-east-1, despite that being where Lambda@Edge itself deploys — verify
+with `aws secretsmanager list-secrets --region us-west-2` if in doubt).
+Create the new secret in the same region so `buildspec.mjs` can read all
+three with one `SECRETS_REGION` value:
+
 ```bash
 COOKIE_KEY=$(openssl rand -base64 32)
 aws secretsmanager create-secret \
   --name 3dprinting/cookie-key \
-  --region us-east-1 \
+  --region us-west-2 \
   --secret-string "{\"encryption_key\":\"$COOKIE_KEY\",\"previous_keys\":[]}"
 ```
 
@@ -372,14 +378,6 @@ already grants this role read access to them. If you ever want a
 different email allowlist for this page specifically, split it into its
 own `3dprinting/allowed-emails` secret and update `buildspec.mjs`
 accordingly — not needed for the default single-user setup.
-
-**Important:** confirm which region `kittycam/oauth` and
-`kittycam/allowed-emails` actually live in (`aws secretsmanager
-list-secrets --region us-east-1` / `--region us-west-2`) and make sure
-`SECRETS_REGION` in `deploy-3dprinting.yml` matches. All three secrets
-(`kittycam/oauth`, `kittycam/allowed-emails`, `3dprinting/cookie-key`)
-must be in the same region, since the workflow reads them all with one
-`SECRETS_REGION` value.
 
 ---
 
