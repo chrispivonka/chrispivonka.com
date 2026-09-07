@@ -168,6 +168,62 @@ aws iam create-role \
       "Resource": "arn:aws:route53:::hostedzone/*"
     },
     {
+      "Sid": "Route53GetChange",
+      "Effect": "Allow",
+      "Action": "route53:GetChange",
+      "Resource": "arn:aws:route53:::change/*"
+    },
+    {
+      "Sid": "Lambda",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:DeleteFunction",
+        "lambda:PublishVersion",
+        "lambda:CreateAlias",
+        "lambda:UpdateAlias",
+        "lambda:DeleteAlias",
+        "lambda:GetAlias",
+        "lambda:ListVersionsByFunction",
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:GetPolicy",
+        "lambda:EnableReplication*"
+      ],
+      "Resource": "arn:aws:lambda:us-east-1:*:function:printing3d-*"
+    },
+    {
+      "Sid": "IAMForLambda",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PassRole",
+        "iam:TagRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/printing3d-*"
+    },
+    {
+      "Sid": "SecretsManager",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": [
+        "arn:aws:secretsmanager:us-east-1:*:secret:kittycam/oauth-*",
+        "arn:aws:secretsmanager:us-east-1:*:secret:kittycam/allowed-emails-*",
+        "arn:aws:secretsmanager:us-east-1:*:secret:3dprinting/*"
+      ]
+    },
+    {
       "Sid": "SNS",
       "Effect": "Allow",
       "Action": [
@@ -277,7 +333,57 @@ aws route53 change-resource-record-sets \
 
 ---
 
-## 4. Deploy the Infrastructure
+## 4. Google OAuth & Secrets (reusing kitty-cam's login)
+
+This page is gated the same way as kitty-cam: Google OAuth2 + PKCE via
+Lambda@Edge. Rather than standing up a second OAuth app, it reuses
+kitty-cam's — same login, same allowed-emails list. Only the cookie
+encryption key is separate (session cookies are domain-scoped, no reason
+to share).
+
+### 4a. Add a second redirect URI to the existing OAuth app
+
+In [Google Cloud Console](https://console.cloud.google.com/) > **APIs &
+Services > Credentials**, open the OAuth client already used for
+kitty-cam and add:
+
+```
+https://3dprinting.chrispivonka.com/oauth2/callback
+```
+
+as an additional **Authorized redirect URI** (alongside kitty-cam's
+existing one). Save.
+
+### 4b. Create the cookie encryption key secret
+
+```bash
+COOKIE_KEY=$(openssl rand -base64 32)
+aws secretsmanager create-secret \
+  --name 3dprinting/cookie-key \
+  --region us-east-1 \
+  --secret-string "{\"encryption_key\":\"$COOKIE_KEY\",\"previous_keys\":[]}"
+```
+
+### 4c. Nothing else to create
+
+`kittycam/oauth` and `kittycam/allowed-emails` already exist from
+kitty-cam's setup and are reused as-is — the IAM policy in step 1c
+already grants this role read access to them. If you ever want a
+different email allowlist for this page specifically, split it into its
+own `3dprinting/allowed-emails` secret and update `buildspec.mjs`
+accordingly — not needed for the default single-user setup.
+
+**Important:** confirm which region `kittycam/oauth` and
+`kittycam/allowed-emails` actually live in (`aws secretsmanager
+list-secrets --region us-east-1` / `--region us-west-2`) and make sure
+`SECRETS_REGION` in `deploy-3dprinting.yml` matches. All three secrets
+(`kittycam/oauth`, `kittycam/allowed-emails`, `3dprinting/cookie-key`)
+must be in the same region, since the workflow reads them all with one
+`SECRETS_REGION` value.
+
+---
+
+## 5. Deploy the Infrastructure
 
 ```bash
 # Option A: Push to main (triggers GitHub Actions)
@@ -294,9 +400,9 @@ sam deploy --parameter-overrides HostedZoneId=YOUR_ZONE_ID
 
 ---
 
-## 5. IAM User for the Telemetry Publisher
+## 6. IAM User for the Telemetry Publisher
 
-`publish-to-s3.py` runs on a device on your LAN (see step 6) and needs
+`publish-to-s3.py` runs on a device on your LAN (see step 7) and needs
 write access to two S3 prefixes in the private content bucket. It does
 **not** get GitHub's OIDC role — that only works for GitHub Actions. Create
 a dedicated, narrowly-scoped IAM user instead:
@@ -345,7 +451,7 @@ LAN device in the next step. Rotate these periodically
 
 ---
 
-## 6. Run the Telemetry Publisher on Your LAN
+## 7. Run the Telemetry Publisher on Your LAN
 
 This needs to run continuously on a device that can reach the printer's IP
 — a Raspberry Pi, NAS, or an existing always-on desktop, anything on the
@@ -369,8 +475,8 @@ cd chrispivonka.com/subdomains/3dprinting
 
 cp .env.example .env
 # edit .env: BAMBU_IP, BAMBU_SERIAL, BAMBU_ACCESS_CODE,
-# the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from step 5,
-# and YOUTUBE_STREAM_KEY / YOUTUBE_VIDEO_ID from step 7 (skip step 7
+# the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from step 6,
+# and YOUTUBE_STREAM_KEY / YOUTUBE_VIDEO_ID from step 8 (skip step 8
 # for now and leave those blank if you just want telemetry first —
 # the camera-relay container will simply retry/fail harmlessly)
 
@@ -379,7 +485,7 @@ docker compose logs -f
 ```
 
 `docker compose` starts two containers: `bambu-publisher` (telemetry ->
-S3) and `camera-relay` (printer camera -> YouTube Live, see step 7). You
+S3) and `camera-relay` (printer camera -> YouTube Live, see step 8). You
 should see `Connected to printer MQTT broker` and periodic `Published:
 status=... progress=...%` lines from the former. Check
 `https://3dprinting.chrispivonka.com` — the live job card and specs should
@@ -400,7 +506,7 @@ cd chrispivonka.com/subdomains/3dprinting
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-aws configure   # paste the IAM access key/secret from step 5, region us-east-1
+aws configure   # paste the IAM access key/secret from step 6, region us-east-1
 ```
 
 Test it directly first:
@@ -456,7 +562,7 @@ sudo systemctl status bambu-publisher
 journalctl -u bambu-publisher -f
 ```
 
-Note: the camera relay (step 7) currently only has a Docker setup
+Note: the camera relay (step 8) currently only has a Docker setup
 (`camera-relay/`). To run it bare-metal instead, install `ffmpeg` and run
 `camera-relay/relay.sh` directly with `BAMBU_IP`, `BAMBU_ACCESS_CODE`, and
 `YOUTUBE_STREAM_KEY` set — wrap it in its own systemd unit the same way as
@@ -464,20 +570,20 @@ above.
 
 ---
 
-## 7. Live Video via YouTube Live
+## 8. Live Video via YouTube Live
 
 Confirmed working for X1, X1C, X1E, X2D, P2S, and H2-series printers —
 they expose a real RTSPS camera feed locally. (A1/A1 Mini/P1P/P1S use a
 different proprietary protocol and aren't covered by this setup.)
 
-### 7a. Enable the camera feed on the printer
+### 8a. Enable the camera feed on the printer
 
 On the touchscreen: **Settings > Network**, toggle on **LAN Mode
 Liveview** (separate from LAN Only Mode, which you already enabled in
-step 6). This exposes the RTSPS stream at
+step 7). This exposes the RTSPS stream at
 `rtsps://bblp:<access_code>@<printer-ip>:322/streaming/live/1`.
 
-### 7b. Set up a YouTube Live stream
+### 8b. Set up a YouTube Live stream
 
 1. In YouTube Studio, go to **Create > Go Live**.
 2. If this is the first time on this channel, live streaming needs to be
@@ -492,9 +598,9 @@ step 6). This exposes the RTSPS stream at
    `noindex, nofollow` / private-by-obscurity posture. Public/searchable
    would put your live printer feed in YouTube search results.
 
-### 7c. Run the relay
+### 8c. Run the relay
 
-Already included in `docker compose up -d --build` from step 6 once
+Already included in `docker compose up -d --build` from step 7 once
 `YOUTUBE_STREAM_KEY` is set in `.env` — it's the `camera-relay` service.
 Check it directly:
 
@@ -517,7 +623,11 @@ then `docker compose up -d --build camera-relay`.
 
 ## Verification Checklist
 
-- [ ] `https://3dprinting.chrispivonka.com` loads over HTTPS with a valid cert
+- [ ] `https://3dprinting.chrispivonka.com` redirects to Google login
+- [ ] After login with an allowed email, the page loads
+- [ ] Unauthorized email gets a 403 page with a "try a different account" link
+- [ ] Browser dev tools show cookie: `__Host-p3d_session`, `HttpOnly`, `Secure`, `SameSite=Lax`
+- [ ] `/oauth2/sign_out` clears the session and redirects to login
 - [ ] `curl -I https://3dprinting.chrispivonka.com` shows HSTS, CSP, X-Frame-Options headers
 - [ ] Browser console shows no CSP violations (check the import map and Three.js loaded)
 - [ ] Direct S3 bucket URL returns 403 (private bucket, CloudFront-OAC-only)

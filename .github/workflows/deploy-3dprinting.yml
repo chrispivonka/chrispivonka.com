@@ -23,9 +23,14 @@ jobs:
     name: Deploy 3D Printing Lab Infrastructure & Content
     env:
       AWS_REGION: us-east-1
+      SECRETS_REGION: us-east-1
 
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
@@ -37,6 +42,10 @@ jobs:
         uses: aws-actions/setup-sam@v3
         with:
           use-installer: true
+
+      - name: Inject secrets into Lambda config
+        working-directory: infra/3dprinting
+        run: SECRETS_REGION=${{ env.SECRETS_REGION }} node buildspec.mjs
 
       - name: SAM build
         working-directory: infra/3dprinting

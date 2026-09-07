@@ -1,9 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  3D Printing & Hardware Lab: public showcase page.
-  CloudFront + S3, live Bambu Lab telemetry via S3 polling.
-  No auth layer — unlike kitty-cam this page is intentionally public.
+  3D Printing & Hardware Lab: authenticated showcase page.
+  CloudFront + Lambda@Edge + S3 with Google OAuth2 + PKCE (same pattern
+  as kitty-cam, reusing its OAuth app), live Bambu Lab telemetry via S3
+  polling.
 
 Parameters:
   DomainName:
@@ -344,6 +345,37 @@ Resources:
       - WAFLogGroupPolicy
 
   # ──────────────────────────────────────────────
+  # Lambda@Edge: Auth Function
+  # ──────────────────────────────────────────────
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs20.x
+      Handler: index.handler
+      CodeUri: src/auth/
+      MemorySize: 128
+      Timeout: 5
+      AutoPublishAlias: live
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: "arn:aws:logs:*:*:*"
+
+  # ──────────────────────────────────────────────
   # CloudFront: Distribution
   # ──────────────────────────────────────────────
   Distribution:
@@ -380,12 +412,20 @@ Resources:
             Compress: true
             ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled
+            LambdaFunctionAssociations:
+              - EventType: viewer-request
+                LambdaFunctionARN: !Ref AuthFunction.Version
+                IncludeBody: false
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https
           Compress: true
           ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized
+          LambdaFunctionAssociations:
+            - EventType: viewer-request
+              LambdaFunctionARN: !Ref AuthFunction.Version
+              IncludeBody: false
         CustomErrorResponses:
           - ErrorCode: 403
             ResponseCode: 403
