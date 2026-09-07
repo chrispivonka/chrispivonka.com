@@ -1,0 +1,104 @@
+name: Deploy 3D Printing Lab
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "subdomains/3dprinting/**"
+      - "infra/3dprinting/**"
+      - ".github/workflows/deploy-3dprinting.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: 3dprinting-deployment
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC federation
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy 3D Printing Lab Infrastructure & Content
+    env:
+      AWS_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.PRINTING_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup AWS SAM CLI
+        uses: aws-actions/setup-sam@v3
+        with:
+          use-installer: true
+
+      - name: SAM build
+        working-directory: infra/3dprinting
+        run: sam build
+
+      - name: SAM deploy
+        working-directory: infra/3dprinting
+        run: |
+          sam deploy \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              HostedZoneId=${{ secrets.PRINTING_HOSTED_ZONE_ID }} \
+              AlertEmail=${{ secrets.PRINTING_ALERT_EMAIL }}
+
+      - name: Get stack outputs
+        id: stack
+        working-directory: infra/3dprinting
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name 3dprinting \
+            --query "Stacks[0].Outputs[?OutputKey=='ContentBucketName'].OutputValue" \
+            --output text)
+          DIST_ID=$(aws cloudformation describe-stacks \
+            --stack-name 3dprinting \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
+            --output text)
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "distribution_id=$DIST_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Sync static content to S3
+        run: |
+          # Sync only the code files below. Deliberately no --delete: the
+          # live telemetry publisher (publish-to-s3.py, running on the
+          # printer's LAN) writes printer-status.json and history/*.stl
+          # straight to this bucket outside of git. An aws s3 sync --delete
+          # treats filtered-out source files as absent and would delete
+          # those live objects from the bucket on every deploy.
+          aws s3 sync subdomains/3dprinting/ s3://${{ steps.stack.outputs.bucket }} \
+            --exclude "*" \
+            --include "printing.html" \
+            --include "printing-config.js" \
+            --include "printing-loader.js" \
+            --include "importmap.json" \
+            --include "robots.txt" \
+            --include "output.stl" \
+            --include "sample-box.stl"
+
+          # Sync shared assets from main site
+          aws s3 sync css/ s3://${{ steps.stack.outputs.bucket }}/css/
+          aws s3 sync js/ s3://${{ steps.stack.outputs.bucket }}/js/
+          aws s3 sync assets/ s3://${{ steps.stack.outputs.bucket }}/assets/
+          aws s3 sync partials/ s3://${{ steps.stack.outputs.bucket }}/partials/
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.stack.outputs.distribution_id }} \
+            --paths "/printing.html" "/printing-config.js" "/printing-loader.js" "/importmap.json" "/output.stl" "/sample-box.stl" "/css/*" "/js/*" "/assets/*" "/partials/*"
+
+      - name: Deployment summary
+        run: |
+          echo "3D Printing Lab deployed successfully!"
+          echo "URL: https://3dprinting.chrispivonka.com"
+          echo "Bucket: ${{ steps.stack.outputs.bucket }}"
+          echo "Distribution: ${{ steps.stack.outputs.distribution_id }}"

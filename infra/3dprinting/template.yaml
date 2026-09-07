@@ -1,0 +1,469 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  3D Printing & Hardware Lab: public showcase page.
+  CloudFront + S3, live Bambu Lab telemetry via S3 polling.
+  No auth layer — unlike kitty-cam this page is intentionally public.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: 3dprinting.chrispivonka.com
+  HostedZoneId:
+    Type: String
+    Description: Route 53 hosted zone ID for chrispivonka.com
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Email for CloudWatch alarm notifications (leave empty to skip)
+  StreamConnectOrigins:
+    Type: String
+    Default: "'self'"
+    Description: >-
+      Space-separated CSP origins for connect-src, beyond 'self'.
+      Only needed if telemetry/snapshots are ever served from a domain
+      other than this CloudFront distribution.
+  StreamFrameOrigins:
+    Type: String
+    Default: "https://www.youtube.com https://www.youtube-nocookie.com"
+    Description: >-
+      Space-separated CSP origins for frame-src. Defaults to YouTube since
+      the camera relay (camera-relay/) pushes the printer's live feed to
+      YouTube Live and the page embeds it via iframe.
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Resources:
+  # ──────────────────────────────────────────────
+  # TLS Certificate (must be us-east-1 for CloudFront)
+  # ──────────────────────────────────────────────
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+
+  # ──────────────────────────────────────────────
+  # S3: Content Bucket (private, encrypted, versioned)
+  # Telemetry publisher (publish-to-s3.py) writes printer-status.json
+  # and CAD/history assets here too — same bucket, same OAC-only access.
+  # ──────────────────────────────────────────────
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+
+  ContentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ContentBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${ContentBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+          - Sid: DenyNonSecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ContentBucket.Arn
+              - !Sub "${ContentBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  # ──────────────────────────────────────────────
+  # S3: Logging Bucket (for CloudFront access logs)
+  # ──────────────────────────────────────────────
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          # BucketOwnerPreferred is required for CloudFront standard logging
+          # to write access logs via ACL-based permissions
+          - ObjectOwnership: BucketOwnerPreferred
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireLogs
+            Status: Enabled
+            ExpirationInDays: 90
+
+  LoggingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LoggingBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontLogging
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${LoggingBucket.Arn}/cloudfront/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+          - Sid: DenyNonSecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt LoggingBucket.Arn
+              - !Sub "${LoggingBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  # ──────────────────────────────────────────────
+  # CloudFront: Origin Access Control
+  # ──────────────────────────────────────────────
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: 3dprinting-oac
+        Description: OAC for 3dprinting S3 origin
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # ──────────────────────────────────────────────
+  # CloudFront: Response Headers Policy
+  # ──────────────────────────────────────────────
+  ResponseHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: 3dprinting-security-headers
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Preload: true
+            Override: true
+          ContentSecurityPolicy:
+            # No 'unsafe-inline' — the import map and clock/uptime logic
+            # were moved into external files (importmap.json, printing-loader.js)
+            # specifically so this stays strict. Don't reintroduce inline
+            # <script> blocks in printing.html without revisiting this.
+            ContentSecurityPolicy: !Sub >-
+              default-src 'self';
+              script-src 'self' https://cdn.jsdelivr.net;
+              style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com;
+              font-src 'self' https://fonts.gstatic.com;
+              img-src 'self' data:;
+              connect-src 'self' ${StreamConnectOrigins};
+              frame-src ${StreamFrameOrigins};
+              frame-ancestors 'none';
+              base-uri 'self';
+              form-action 'self';
+              object-src 'none';
+              upgrade-insecure-requests
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+        CustomHeadersConfig:
+          Items:
+            - Header: Permissions-Policy
+              Value: "geolocation=(), microphone=(), camera=()"
+              Override: true
+            - Header: X-Robots-Tag
+              Value: "noindex, nofollow"
+              Override: true
+            - Header: Cross-Origin-Opener-Policy
+              Value: "same-origin"
+              Override: true
+            - Header: Cross-Origin-Resource-Policy
+              Value: "same-origin"
+              Override: true
+
+  # ──────────────────────────────────────────────
+  # WAF: Web Application Firewall
+  # ──────────────────────────────────────────────
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: 3dprinting-waf
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "3DPrintingWAF"
+      Rules:
+        - Name: AWSIPReputationList
+          Priority: 0
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSIPReputationList
+        - Name: AWSCommonRuleSet
+          Priority: 1
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSCommonRuleSet
+        - Name: AWSKnownBadInputs
+          Priority: 2
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWSKnownBadInputs
+        - Name: RateLimit
+          Priority: 3
+          Statement:
+            RateBasedStatement:
+              Limit: 300
+              AggregateKeyType: IP
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimit
+
+  # ──────────────────────────────────────────────
+  # WAF: Logging
+  # ──────────────────────────────────────────────
+  WAFLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "aws-waf-logs-${DomainName}"
+      RetentionInDays: 30
+
+  WAFLogGroupPolicy:
+    Type: AWS::Logs::ResourcePolicy
+    Properties:
+      PolicyName: !Sub "waf-logs-${DomainName}"
+      PolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowWAFLogging",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "delivery.logs.amazonaws.com"
+              },
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws-waf-logs-${DomainName}:*",
+              "Condition": {
+                "ArnLike": {
+                  "aws:SourceArn": "${WebACL.Arn}"
+                }
+              }
+            }
+          ]
+        }
+
+  WAFLoggingConfiguration:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt WebACL.Arn
+      LogDestinationConfigs:
+        - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws-waf-logs-${DomainName}"
+      RedactedFields:
+        - SingleHeader:
+            Name: cookie
+    DependsOn:
+      - WAFLogGroup
+      - WAFLogGroupPolicy
+
+  # ──────────────────────────────────────────────
+  # CloudFront: Distribution
+  # ──────────────────────────────────────────────
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "3D Printing & Hardware Lab (${DomainName})"
+        Aliases:
+          - !Ref DomainName
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        DefaultRootObject: printing.html
+        WebACLId: !GetAtt WebACL.Arn
+        Logging:
+          Bucket: !GetAtt LoggingBucket.DomainName
+          IncludeCookies: false
+          Prefix: cloudfront/
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt ContentBucket.RegionalDomainName
+            OriginAccessControlId: !Ref OriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        CacheBehaviors:
+          # Telemetry is polled every 5s by the page — never cache it.
+          - PathPattern: printer-status.json
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 403
+            ResponsePagePath: /printing.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 404
+            ResponsePagePath: /printing.html
+            ErrorCachingMinTTL: 0
+
+  # ──────────────────────────────────────────────
+  # Route 53: DNS Records
+  # ──────────────────────────────────────────────
+  DNSRecordIPv4:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2 # CloudFront global hosted zone ID
+
+  DNSRecordIPv6:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+
+  # ──────────────────────────────────────────────
+  # Monitoring: CloudWatch Alarm + SNS
+  # Telemetry publisher runs on a machine you control, not in AWS, so
+  # there's no Lambda to alarm on — this watches for the site going down
+  # (elevated CloudFront 5xx rate, e.g. if the S3 origin is unreachable).
+  # ──────────────────────────────────────────────
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
+    Properties:
+      Subscription:
+        - Endpoint: !Ref AlertEmail
+          Protocol: email
+
+  OriginErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
+    Properties:
+      AlarmName: !Sub "${DomainName}-5xx-errors"
+      AlarmDescription: CloudFront 5xx error rate against the S3 origin
+      Namespace: AWS/CloudFront
+      MetricName: 5xxErrorRate
+      Dimensions:
+        - Name: DistributionId
+          Value: !Ref Distribution
+        - Name: Region
+          Value: Global
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+
+Outputs:
+  DistributionId:
+    Value: !Ref Distribution
+    Description: CloudFront distribution ID (for cache invalidation)
+  DistributionDomainName:
+    Value: !GetAtt Distribution.DomainName
+    Description: CloudFront domain name
+  ContentBucketName:
+    Value: !Ref ContentBucket
+    Description: S3 bucket for static content and printer telemetry
+  SiteUrl:
+    Value: !Sub "https://${DomainName}"

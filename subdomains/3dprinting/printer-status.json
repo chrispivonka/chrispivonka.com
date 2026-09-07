@@ -1,0 +1,74 @@
+{
+  "status": "PRINTING",
+  "printerModel": "Bambu Lab CoreXY",
+  "fileName": "ESP32_Environmental_Sensor_Housing.gcode",
+  "modelName": "output.stl",
+  "modelUrl": "./output.stl",
+  "progressPercent": 68,
+  "currentLayer": 142,
+  "totalLayers": 210,
+  "timeRemaining": "28m 14s",
+  "timeElapsed": "58m 42s",
+  "temps": {
+    "nozzle": "215°C",
+    "nozzleTarget": "215°C",
+    "bed": "60°C",
+    "bedTarget": "60°C",
+    "chamber": "38°C"
+  },
+  "ams": [
+    { "slot": 1, "material": "PLA+ White", "color": "#ffffff", "active": false },
+    { "slot": 2, "material": "PETG Charcoal", "color": "#333333", "active": true },
+    { "slot": 3, "material": "TPU Neon Cyan", "color": "#58a6ff", "active": false },
+    { "slot": 4, "material": "PVA Support", "color": "#d29922", "active": false }
+  ],
+  "printHistory": [
+    {
+      "id": "job-112",
+      "name": "ESP32_Environmental_Sensor_Housing.gcode",
+      "modelName": "output.stl",
+      "modelUrl": "./output.stl",
+      "material": "PETG Charcoal",
+      "printTime": "1h 26m",
+      "filamentWeight": "38.4g",
+      "completedAt": "2026-07-21 18:40",
+      "status": "COMPLETED"
+    },
+    {
+      "id": "job-111",
+      "name": "RPi4_DIN_Rail_Mount_Bracket.gcode",
+      "modelName": "sample-box.stl",
+      "modelUrl": "./sample-box.stl",
+      "material": "PLA+ White",
+      "printTime": "48m",
+      "filamentWeight": "19.2g",
+      "completedAt": "2026-07-20 14:15",
+      "status": "COMPLETED"
+    },
+    {
+      "id": "job-110",
+      "name": "MagicMirror_Corner_Bezel_TL.gcode",
+      "modelName": "output.stl",
+      "modelUrl": "./output.stl",
+      "material": "ABS Black",
+      "printTime": "2h 12m",
+      "filamentWeight": "51.8g",
+      "completedAt": "2026-07-19 09:30",
+      "status": "COMPLETED"
+    },
+    {
+      "id": "job-109",
+      "name": "Voron_Stealthburner_Duct_v2.gcode",
+      "modelName": "sample-box.stl",
+      "modelUrl": "./sample-box.stl",
+      "material": "ABS Neon Red",
+      "printTime": "3h 05m",
+      "filamentWeight": "74.0g",
+      "completedAt": "2026-07-18 21:04",
+      "status": "COMPLETED"
+    }
+  ],
+  "snapshotUrl": null,
+  "streamUrl": null,
+  "updatedAt": "2026-07-21T21:08:00Z"
+}
