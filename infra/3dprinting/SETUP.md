@@ -99,7 +99,9 @@ aws iam create-role \
         "s3:PutBucketPublicAccessBlock",
         "s3:PutEncryptionConfiguration",
         "s3:PutLifecycleConfiguration",
-        "s3:PutBucketOwnershipControls"
+        "s3:PutBucketOwnershipControls",
+        "s3:GetBucketAcl",
+        "s3:PutBucketAcl"
       ],
       "Resource": [
         "arn:aws:s3:::printing3d-*",
