@@ -79,7 +79,10 @@ aws iam create-role \
         "cloudformation:GetTemplateSummary",
         "cloudformation:ListStackResources"
       ],
-      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/3dprinting/*"
+      "Resource": [
+        "arn:aws:cloudformation:us-east-1:*:stack/3dprinting/*",
+        "arn:aws:cloudformation:us-east-1:*:stack/aws-sam-cli-managed-default/*"
+      ]
     },
     {
       "Sid": "SAMArtifacts",
