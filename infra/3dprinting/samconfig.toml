@@ -1,7 +1,7 @@
 version = 0.1
 
 [default.deploy.parameters]
-stack_name = "3dprinting"
+stack_name = "printing3d"
 region = "us-east-1"
 resolve_s3 = true
 s3_prefix = "3dprinting"

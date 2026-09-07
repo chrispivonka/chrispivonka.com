@@ -16,7 +16,7 @@ Requirements:
 Usage:
   python3 publish-to-s3.py \\
     --host 192.168.1.50 --serial 01P00A000000000 --access-code 12345678 \\
-    --stack-name 3dprinting
+    --stack-name printing3d
 
   Or via env vars: BAMBU_IP, BAMBU_SERIAL, BAMBU_ACCESS_CODE, AWS_REGION,
   PRINTING_S3_BUCKET (skips the CloudFormation stack lookup if set).
@@ -411,7 +411,7 @@ def main():
     parser.add_argument("--host", default=os.environ.get("BAMBU_IP"), help="Printer LAN IP address")
     parser.add_argument("--serial", default=os.environ.get("BAMBU_SERIAL"), help="Printer serial number")
     parser.add_argument("--access-code", default=os.environ.get("BAMBU_ACCESS_CODE"), help="LAN-only mode access code")
-    parser.add_argument("--stack-name", default=os.environ.get("PRINTING_STACK_NAME", "3dprinting"), help="CloudFormation stack name to resolve the bucket from")
+    parser.add_argument("--stack-name", default=os.environ.get("PRINTING_STACK_NAME", "printing3d"), help="CloudFormation stack name to resolve the bucket from")
     parser.add_argument("--bucket", default=None, help="S3 bucket (skips CloudFormation lookup)")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-east-1"), help="AWS region")
     parser.add_argument("--youtube-video-id", default=os.environ.get("YOUTUBE_VIDEO_ID"), help="YouTube Live video ID (from the same persistent stream the camera-relay pushes to) — embedded as the live feed on the page")

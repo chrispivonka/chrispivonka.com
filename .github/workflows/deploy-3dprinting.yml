@@ -56,11 +56,11 @@ jobs:
         working-directory: infra/3dprinting
         run: |
           BUCKET=$(aws cloudformation describe-stacks \
-            --stack-name 3dprinting \
+            --stack-name printing3d \
             --query "Stacks[0].Outputs[?OutputKey=='ContentBucketName'].OutputValue" \
             --output text)
           DIST_ID=$(aws cloudformation describe-stacks \
-            --stack-name 3dprinting \
+            --stack-name printing3d \
             --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" \
             --output text)
           echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"

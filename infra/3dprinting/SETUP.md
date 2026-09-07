@@ -80,7 +80,7 @@ aws iam create-role \
         "cloudformation:ListStackResources"
       ],
       "Resource": [
-        "arn:aws:cloudformation:us-east-1:*:stack/3dprinting/*",
+        "arn:aws:cloudformation:us-east-1:*:stack/printing3d/*",
         "arn:aws:cloudformation:us-east-1:*:stack/aws-sam-cli-managed-default/*"
       ]
     },
@@ -102,8 +102,8 @@ aws iam create-role \
         "s3:PutBucketOwnershipControls"
       ],
       "Resource": [
-        "arn:aws:s3:::3dprinting-*",
-        "arn:aws:s3:::3dprinting-*/*",
+        "arn:aws:s3:::printing3d-*",
+        "arn:aws:s3:::printing3d-*/*",
         "arn:aws:s3:::aws-sam-cli-managed-default-*",
         "arn:aws:s3:::aws-sam-cli-managed-default-*/*"
       ]
@@ -176,7 +176,7 @@ aws iam create-role \
         "sns:SetTopicAttributes",
         "sns:TagResource"
       ],
-      "Resource": "arn:aws:sns:us-east-1:*:3dprinting-*"
+      "Resource": "arn:aws:sns:us-east-1:*:printing3d-*"
     },
     {
       "Sid": "CloudWatch",
@@ -294,7 +294,7 @@ a dedicated, narrowly-scoped IAM user instead:
 aws iam create-user --user-name 3dprinting-publisher
 
 BUCKET=$(aws cloudformation describe-stacks \
-  --stack-name 3dprinting \
+  --stack-name printing3d \
   --query "Stacks[0].Outputs[?OutputKey=='ContentBucketName'].OutputValue" \
   --output text)
 
@@ -314,7 +314,7 @@ cat > publisher-policy.json <<EOF
     {
       "Effect": "Allow",
       "Action": "cloudformation:DescribeStacks",
-      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/3dprinting/*"
+      "Resource": "arn:aws:cloudformation:us-east-1:*:stack/printing3d/*"
     }
   ]
 }
