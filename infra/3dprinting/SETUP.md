@@ -221,7 +221,9 @@ aws iam create-role \
       "Action": [
         "wafv2:PutLoggingConfiguration",
         "wafv2:GetLoggingConfiguration",
-        "wafv2:DeleteLoggingConfiguration"
+        "wafv2:DeleteLoggingConfiguration",
+        "logs:CreateLogDelivery",
+        "logs:DeleteLogDelivery"
       ],
       "Resource": "*"
     }
