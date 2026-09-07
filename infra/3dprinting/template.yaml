@@ -25,10 +25,11 @@ Parameters:
       other than this CloudFront distribution.
   StreamFrameOrigins:
     Type: String
-    Default: "'none'"
+    Default: "https://www.youtube.com https://www.youtube-nocookie.com"
     Description: >-
-      Space-separated CSP origins for frame-src.
-      Set to a stream host (e.g. YouTube) only if streamMode uses an iframe embed.
+      Space-separated CSP origins for frame-src. Defaults to YouTube since
+      the camera relay (camera-relay/) pushes the printer's live feed to
+      YouTube Live and the page embeds it via iframe.
 
 Conditions:
   HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]

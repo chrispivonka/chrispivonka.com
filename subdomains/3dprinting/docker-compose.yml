@@ -8,5 +8,12 @@ services:
     volumes:
       - bambu-publisher-data:/data
 
+  camera-relay:
+    build: ./camera-relay
+    image: 3dprinting-camera-relay
+    restart: unless-stopped
+    env_file:
+      - .env
+
 volumes:
   bambu-publisher-data:

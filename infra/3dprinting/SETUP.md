@@ -301,10 +301,11 @@ cat > publisher-policy.json <<EOF
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": "s3:PutObject",
+      "Action": ["s3:PutObject", "s3:GetObject"],
       "Resource": [
         "arn:aws:s3:::${BUCKET}/printer-status.json",
-        "arn:aws:s3:::${BUCKET}/live/*"
+        "arn:aws:s3:::${BUCKET}/live/*",
+        "arn:aws:s3:::${BUCKET}/history/*"
       ]
     },
     {
@@ -354,17 +355,23 @@ cd chrispivonka.com/subdomains/3dprinting
 
 cp .env.example .env
 # edit .env: BAMBU_IP, BAMBU_SERIAL, BAMBU_ACCESS_CODE,
-# and the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from step 5
+# the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from step 5,
+# and YOUTUBE_STREAM_KEY / YOUTUBE_VIDEO_ID from step 7 (skip step 7
+# for now and leave those blank if you just want telemetry first —
+# the camera-relay container will simply retry/fail harmlessly)
 
 docker compose up -d --build
 docker compose logs -f
 ```
 
-You should see `Connected to printer MQTT broker` and periodic `Published:
-status=... progress=...%` lines. Check `https://3dprinting.chrispivonka.com`
-— the live job card and specs should update within a few seconds.
+`docker compose` starts two containers: `bambu-publisher` (telemetry ->
+S3) and `camera-relay` (printer camera -> YouTube Live, see step 7). You
+should see `Connected to printer MQTT broker` and periodic `Published:
+status=... progress=...%` lines from the former. Check
+`https://3dprinting.chrispivonka.com` — the live job card and specs should
+update within a few seconds.
 
-The container restarts automatically (`restart: unless-stopped`) on crash
+Both containers restart automatically (`restart: unless-stopped`) on crash
 or host reboot. Print history persists across restarts in the
 `bambu-publisher-data` Docker volume — don't `docker compose down -v`
 unless you want to wipe it.
@@ -425,6 +432,7 @@ BAMBU_ACCESS_CODE=12345678
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=us-east-1
+YOUTUBE_VIDEO_ID=...
 ```
 
 ```bash
@@ -433,6 +441,63 @@ sudo systemctl enable --now bambu-publisher
 sudo systemctl status bambu-publisher
 journalctl -u bambu-publisher -f
 ```
+
+Note: the camera relay (step 7) currently only has a Docker setup
+(`camera-relay/`). To run it bare-metal instead, install `ffmpeg` and run
+`camera-relay/relay.sh` directly with `BAMBU_IP`, `BAMBU_ACCESS_CODE`, and
+`YOUTUBE_STREAM_KEY` set — wrap it in its own systemd unit the same way as
+above.
+
+---
+
+## 7. Live Video via YouTube Live
+
+Confirmed working for X1, X1C, X1E, X2D, P2S, and H2-series printers —
+they expose a real RTSPS camera feed locally. (A1/A1 Mini/P1P/P1S use a
+different proprietary protocol and aren't covered by this setup.)
+
+### 7a. Enable the camera feed on the printer
+
+On the touchscreen: **Settings > Network**, toggle on **LAN Mode
+Liveview** (separate from LAN Only Mode, which you already enabled in
+step 6). This exposes the RTSPS stream at
+`rtsps://bblp:<access_code>@<printer-ip>:322/streaming/live/1`.
+
+### 7b. Set up a YouTube Live stream
+
+1. In YouTube Studio, go to **Create > Go Live**.
+2. If this is the first time on this channel, live streaming needs to be
+   enabled first (channel verification) — this can take up to 24 hours,
+   so do this early.
+3. Use the **Stream** tab (not the simpler "Webcam" option) to get a
+   **persistent stream key** — persistent so the key and video ID never
+   change across container restarts. Copy the **Stream key** into
+   `YOUTUBE_STREAM_KEY` and the **Video ID** (from the stream's URL,
+   `youtube.com/watch?v=<VIDEO_ID>`) into `YOUTUBE_VIDEO_ID`.
+4. Set visibility to **Unlisted** — matches this subdomain's existing
+   `noindex, nofollow` / private-by-obscurity posture. Public/searchable
+   would put your live printer feed in YouTube search results.
+
+### 7c. Run the relay
+
+Already included in `docker compose up -d --build` from step 6 once
+`YOUTUBE_STREAM_KEY` is set in `.env` — it's the `camera-relay` service.
+Check it directly:
+
+```bash
+docker compose logs -f camera-relay
+```
+
+You should see ffmpeg's normal stream-copy output with no repeated
+"retrying" messages. Confirm the feed shows up at
+`youtube.com/watch?v=<VIDEO_ID>` within ~30s, then check
+`https://3dprinting.chrispivonka.com` — the page should replace the
+"LIVE SNAPSHOT" placeholder with the embedded YouTube feed.
+
+If ffmpeg exits immediately with a codec/negotiation error, YouTube
+likely rejected the passthrough stream — edit `camera-relay/relay.sh` and
+swap `-c:v copy` for `-c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k`,
+then `docker compose up -d --build camera-relay`.
 
 ---
 
@@ -444,5 +509,7 @@ journalctl -u bambu-publisher -f
 - [ ] Direct S3 bucket URL returns 403 (private bucket, CloudFront-OAC-only)
 - [ ] Publisher (Docker container or systemd service) is running and printer-status.json updates live while a print runs
 - [ ] Starting/finishing a print on the printer updates the live job card and print history within ~5s / on next poll
+- [ ] Camera relay is running and the YouTube Live feed is embedded on the page (not the snapshot placeholder)
+- [ ] Finishing a print archives that job's real 3MF model — clicking it in print history shows the actual model, not the bundled sample
 - [ ] `dig CAA 3dprinting.chrispivonka.com` shows the amazon.com restriction
 - [ ] WAF logs appear in CloudWatch under `aws-waf-logs-3dprinting.chrispivonka.com`

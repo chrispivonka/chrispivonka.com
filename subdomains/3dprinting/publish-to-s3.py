@@ -106,11 +106,12 @@ def fmt_duration(seconds):
 class PrinterState:
     """Accumulates Bambu MQTT push-status deltas into one coherent snapshot."""
 
-    def __init__(self):
+    def __init__(self, stream_url=None):
         self.raw = {}
         self.print_start = None
         self.last_gcode_file = None
         self.history = self._load_history()
+        self.stream_url = stream_url
 
     def _load_history(self):
         if STATE_FILE.exists():
@@ -143,8 +144,10 @@ class PrinterState:
             self.print_start = time.time() if gcode_state == "RUNNING" else self.print_start
 
         if gcode_state in ("FINISH", "FAILED") and self.print_start is not None:
-            self._record_completed_job(gcode_state)
+            entry = self._record_completed_job(gcode_state)
             self.print_start = None
+            return entry
+        return None
 
     def _record_completed_job(self, gcode_state):
         elapsed = time.time() - self.print_start
@@ -158,7 +161,7 @@ class PrinterState:
             "id": f"job-{int(time.time())}",
             "name": self.last_gcode_file or "Unknown job",
             "modelName": self.last_gcode_file or "Unknown job",
-            "modelUrl": None,  # frontend falls back to the bundled sample model
+            "modelUrl": None,  # set by _archive_completed_model if the live model was captured
             "material": active_material or "Unknown",
             "printTime": fmt_duration(elapsed),
             "completedAt": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
@@ -168,6 +171,7 @@ class PrinterState:
         self.history = self.history[:MAX_HISTORY]
         self._save_history()
         log.info("Recorded completed job: %s (%s)", entry["name"], entry["printTime"])
+        return entry
 
     def active_ams_slots(self):
         ams_block = self.raw.get("ams") or {}
@@ -217,7 +221,7 @@ class PrinterState:
             "ams": self.active_ams_slots(),
             "printHistory": self.history,
             "snapshotUrl": None,
-            "streamUrl": None,
+            "streamUrl": self.stream_url,
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -272,7 +276,7 @@ def try_fetch_current_3mf(host, access_code, gcode_file):
 
 
 class BambuMQTTPublisher:
-    def __init__(self, host, serial, access_code, bucket, region):
+    def __init__(self, host, serial, access_code, bucket, region, youtube_video_id=None):
         if boto3 is None or mqtt is None:
             raise SystemExit("Missing dependencies. Run: pip install -r requirements.txt")
 
@@ -281,7 +285,11 @@ class BambuMQTTPublisher:
         self.access_code = access_code
         self.bucket = bucket
         self.s3 = boto3.client("s3", region_name=region)
-        self.state = PrinterState()
+        stream_url = (
+            f"https://www.youtube-nocookie.com/embed/{youtube_video_id}?autoplay=1&mute=1"
+            if youtube_video_id else None
+        )
+        self.state = PrinterState(stream_url=stream_url)
         self._last_model_fetch_file = None
         self._stop = False
 
@@ -316,7 +324,33 @@ class BambuMQTTPublisher:
             report = json.loads(msg.payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return
-        self.state.apply(report)
+        completed_entry = self.state.apply(report)
+        if completed_entry:
+            self._archive_completed_model(completed_entry)
+
+    def _archive_completed_model(self, entry):
+        """
+        Copy the just-finished job's live model (already uploaded to
+        live/current.3mf while it printed) into history/ so the history
+        table's "View 3D Model" links to the real model instead of falling
+        back to the bundled sample. No-ops if the live fetch never
+        succeeded for this job (e.g. FTPS layout didn't match).
+        """
+        live_key = self.state.raw.get("_live_model_key")
+        if not live_key:
+            return
+        history_key = f"history/{entry['id']}.3mf"
+        try:
+            self.s3.copy_object(
+                Bucket=self.bucket,
+                CopySource={"Bucket": self.bucket, "Key": live_key},
+                Key=history_key,
+            )
+            entry["modelUrl"] = f"/{history_key}"
+            self.state._save_history()
+            log.info("Archived model for %s -> s3://%s/%s", entry["id"], self.bucket, history_key)
+        except Exception as e:
+            log.warning("Could not archive model for completed job %s: %s", entry["id"], e)
 
     def _maybe_fetch_model(self):
         gcode_file = self.state.raw.get("gcode_file")
@@ -380,6 +414,7 @@ def main():
     parser.add_argument("--stack-name", default=os.environ.get("PRINTING_STACK_NAME", "3dprinting"), help="CloudFormation stack name to resolve the bucket from")
     parser.add_argument("--bucket", default=None, help="S3 bucket (skips CloudFormation lookup)")
     parser.add_argument("--region", default=os.environ.get("AWS_REGION", "us-east-1"), help="AWS region")
+    parser.add_argument("--youtube-video-id", default=os.environ.get("YOUTUBE_VIDEO_ID"), help="YouTube Live video ID (from the same persistent stream the camera-relay pushes to) — embedded as the live feed on the page")
     args = parser.parse_args()
 
     missing = [name for name, val in (("--host", args.host), ("--serial", args.serial), ("--access-code", args.access_code)) if not val]
@@ -389,7 +424,7 @@ def main():
     bucket = args.bucket or resolve_bucket(args.stack_name, args.region)
     log.info("Publishing telemetry for printer %s -> s3://%s", args.serial, bucket)
 
-    publisher = BambuMQTTPublisher(args.host, args.serial, args.access_code, bucket, args.region)
+    publisher = BambuMQTTPublisher(args.host, args.serial, args.access_code, bucket, args.region, youtube_video_id=args.youtube_video_id)
     signal.signal(signal.SIGTERM, publisher.stop)
     signal.signal(signal.SIGINT, publisher.stop)
     publisher.run()
