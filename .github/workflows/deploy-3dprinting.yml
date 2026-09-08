@@ -88,10 +88,17 @@ jobs:
             --include "printing.html" \
             --include "printing-config.js" \
             --include "printing-loader.js" \
-            --include "importmap.json" \
             --include "robots.txt" \
             --include "output.stl" \
             --include "sample-box.stl"
+
+          # importmap.json needs the exact MIME type application/importmap+json
+          # for browsers to accept an externally-loaded import map — aws s3 sync
+          # would serve it as generic application/json and browsers silently
+          # reject the whole import map, breaking every "three"/"fflate" import.
+          aws s3 cp subdomains/3dprinting/importmap.json \
+            s3://${{ steps.stack.outputs.bucket }}/importmap.json \
+            --content-type application/importmap+json
 
           # Sync shared assets from main site
           aws s3 sync css/ s3://${{ steps.stack.outputs.bucket }}/css/
