@@ -70,20 +70,38 @@ HEADERS = {
 }
 
 
+CLOUDFLARE_RETRY_ATTEMPTS = 4
+CLOUDFLARE_RETRY_DELAY_SEC = 5
+
+
+def _request_with_retry(make_request, url, parse_json=True):
+    """
+    Cloudflare's challenge occasionally returns a 200 with an empty body
+    instead of solving cleanly on the first try, even with cloudscraper —
+    the reference implementation this is based on hits the same thing.
+    Retrying a few seconds later usually clears it without any user action.
+    """
+    last_error = None
+    for attempt in range(1, CLOUDFLARE_RETRY_ATTEMPTS + 1):
+        resp = make_request()
+        if resp.text.strip():
+            resp.raise_for_status()
+            return resp.json() if parse_json else resp
+        last_error = f"Empty response from {url}"
+        if attempt < CLOUDFLARE_RETRY_ATTEMPTS:
+            print(f"  ({last_error} — likely a transient Cloudflare block, retrying in {CLOUDFLARE_RETRY_DELAY_SEC}s, attempt {attempt}/{CLOUDFLARE_RETRY_ATTEMPTS})")
+            time.sleep(CLOUDFLARE_RETRY_DELAY_SEC)
+    raise SystemExit(f"{last_error} after {CLOUDFLARE_RETRY_ATTEMPTS} attempts — Cloudflare is persistently blocking this request")
+
+
 def api_post(scraper, url, body):
-    resp = scraper.post(url, headers=HEADERS, json=body, timeout=15)
-    if not resp.text.strip():
-        raise SystemExit(f"Empty response from {url} — likely a Cloudflare block (try again in a bit)")
-    resp.raise_for_status()
-    return resp.json()
+    return _request_with_retry(lambda: scraper.post(url, headers=HEADERS, json=body, timeout=15), url)
 
 
 def api_get(scraper, url, token):
-    resp = scraper.get(url, headers={**HEADERS, "Authorization": f"Bearer {token}"}, timeout=15)
-    if not resp.text.strip():
-        raise SystemExit(f"Empty response from {url} — likely a Cloudflare block (try again in a bit)")
-    resp.raise_for_status()
-    return resp.json()
+    return _request_with_retry(
+        lambda: scraper.get(url, headers={**HEADERS, "Authorization": f"Bearer {token}"}, timeout=15), url,
+    )
 
 
 def handle_email_code(scraper, email):
@@ -99,15 +117,11 @@ def handle_email_code(scraper, email):
 
 def handle_authenticator_tfa(scraper, tfa_key):
     code = input("Enter the code from your authenticator app: ").strip()
-    resp = scraper.post(
-        f"{SIGNIN_BASE}/api/sign-in/tfa",
-        headers=HEADERS,
-        json={"tfaKey": tfa_key, "tfaCode": code},
-        timeout=15,
+    url = f"{SIGNIN_BASE}/api/sign-in/tfa"
+    resp = _request_with_retry(
+        lambda: scraper.post(url, headers=HEADERS, json={"tfaKey": tfa_key, "tfaCode": code}, timeout=15),
+        url, parse_json=False,
     )
-    if not resp.text.strip():
-        raise SystemExit("Empty response during authenticator verification — likely a Cloudflare block")
-    resp.raise_for_status()
     token = resp.cookies.get_dict().get("token")
     if not token:
         raise SystemExit("Authenticator verification did not return a token cookie")
