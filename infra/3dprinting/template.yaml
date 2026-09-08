@@ -189,13 +189,19 @@ Resources:
             Preload: true
             Override: true
           ContentSecurityPolicy:
-            # No 'unsafe-inline' — the import map and clock/uptime logic
-            # were moved into external files (importmap.json, printing-loader.js)
-            # specifically so this stays strict. Don't reintroduce inline
-            # <script> blocks in printing.html without revisiting this.
+            # No 'unsafe-inline'. The clock/uptime logic lives in the
+            # external printing-loader.js. The import map MUST stay inline
+            # in printing.html — external import maps (<script type=
+            # "importmap" src="...">) aren't supported by any browser yet
+            # (2026), regardless of Content-Type — so it's allowed via the
+            # exact-content hash below instead of loosening script-src.
+            # If you ever edit the import map's JSON in printing.html,
+            # recompute this hash (sha256 of the exact text between the
+            # <script type="importmap"> tags, whitespace included) or the
+            # page will silently fail to resolve "three"/"fflate" imports.
             ContentSecurityPolicy: !Sub >-
               default-src 'self';
-              script-src 'self' https://cdn.jsdelivr.net;
+              script-src 'self' https://cdn.jsdelivr.net 'sha256-fd2bP+YKlf81IboITpQBJKI62d3AU7vxmAagMeknmRw=';
               style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com;
               font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
               img-src 'self' data:;

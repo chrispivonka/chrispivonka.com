@@ -92,14 +92,6 @@ jobs:
             --include "output.stl" \
             --include "sample-box.stl"
 
-          # importmap.json needs the exact MIME type application/importmap+json
-          # for browsers to accept an externally-loaded import map — aws s3 sync
-          # would serve it as generic application/json and browsers silently
-          # reject the whole import map, breaking every "three"/"fflate" import.
-          aws s3 cp subdomains/3dprinting/importmap.json \
-            s3://${{ steps.stack.outputs.bucket }}/importmap.json \
-            --content-type application/importmap+json
-
           # Sync shared assets from main site
           aws s3 sync css/ s3://${{ steps.stack.outputs.bucket }}/css/
           aws s3 sync js/ s3://${{ steps.stack.outputs.bucket }}/js/
@@ -110,7 +102,7 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.stack.outputs.distribution_id }} \
-            --paths "/printing.html" "/printing-config.js" "/printing-loader.js" "/importmap.json" "/output.stl" "/sample-box.stl" "/css/*" "/js/*" "/assets/*" "/partials/*"
+            --paths "/printing.html" "/printing-config.js" "/printing-loader.js" "/output.stl" "/sample-box.stl" "/css/*" "/js/*" "/assets/*" "/partials/*"
 
       - name: Deployment summary
         run: |
