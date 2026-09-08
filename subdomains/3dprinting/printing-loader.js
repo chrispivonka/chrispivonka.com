@@ -469,25 +469,6 @@ function renderPrintHistory(telemetry) {
   });
 }
 
-function renderProjects() {
-  const projectsContainer = document.getElementById("printing-projects");
-  if (!projectsContainer) {
-    return;
-  }
-
-  projectsContainer.innerHTML = PRINTING_CONFIG.projects.map(p => `
-    <div class="project-card-sub">
-      <div class="card-meta">
-        <span class="card-badge">${p.category}</span>
-        <span class="card-material">Material: ${p.material}</span>
-      </div>
-      <h3 class="card-title">${p.title}</h3>
-      <p class="card-desc">${p.desc}</p>
-      <div class="card-code">${p.codeSnippet}</div>
-    </div>
-  `).join("");
-}
-
 function setupFileInputHandler(container) {
   const fileInput = document.getElementById("stl-file-input");
   if (!fileInput) {
@@ -636,7 +617,6 @@ function init() {
   setupDragAndDrop(viewportContainer);
   setupFileInputHandler(viewportContainer);
 
-  renderProjects();
   updateTelemetryUI();
   initClockAndUptime();
 

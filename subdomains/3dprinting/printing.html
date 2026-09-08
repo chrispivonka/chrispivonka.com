@@ -381,64 +381,6 @@
       color: var(--cyan);
       margin-bottom: 1rem;
     }
-    .projects-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.25rem;
-    }
-    .project-card-sub {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      transition: border-color 0.2s, transform 0.2s;
-    }
-    .project-card-sub:hover {
-      border-color: var(--border-bright);
-      transform: translateY(-2px);
-    }
-    .card-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-family: var(--mono);
-      font-size: 0.68rem;
-    }
-    .card-badge {
-      padding: 0.15rem 0.5rem;
-      border-radius: 4px;
-      background: rgba(88, 166, 255, 0.1);
-      color: var(--cyan);
-      border: 1px solid rgba(88, 166, 255, 0.2);
-    }
-    .card-material {
-      color: var(--yellow);
-    }
-    .card-title {
-      font-family: var(--mono);
-      font-size: 0.95rem;
-      color: var(--text);
-    }
-    .card-desc {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      line-height: 1.45;
-    }
-    .card-code {
-      background: #090d13;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 0.6rem 0.8rem;
-      font-family: var(--mono);
-      font-size: 0.72rem;
-      color: var(--purple);
-      white-space: pre-wrap;
-      overflow-x: auto;
-    }
-
     /* ═══ FOOTER (DIRECT MAIN SITE MATCH) ═══ */
     .site-footer {
       max-width: 900px; margin: 0 auto; width: 100%;
@@ -538,13 +480,6 @@
             <!-- Print history rows rendered by printing-loader.js -->
           </tbody>
         </table>
-      </div>
-    </section>
-
-    <section>
-      <div class="section-title">// cad-prototypes &amp; physical-hardware</div>
-      <div class="projects-grid" id="printing-projects">
-        <!-- Project cards rendered by printing-loader.js -->
       </div>
     </section>
   </main>
