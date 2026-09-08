@@ -106,7 +106,14 @@ def api_get(scraper, url, token):
 
 def handle_email_code(scraper, email):
     print("Requesting an email verification code...")
-    api_post(scraper, f"{API_BASE}/v1/user-service/user/sendemail/code", {"email": email, "type": "codeLogin"})
+    # This endpoint returns an empty body on success (it's fire-and-forget —
+    # there's nothing to parse), so it deliberately skips the retry-on-empty
+    # helper used elsewhere; only the HTTP status matters here.
+    send_resp = scraper.post(
+        f"{API_BASE}/v1/user-service/user/sendemail/code",
+        headers=HEADERS, json={"email": email, "type": "codeLogin"}, timeout=15,
+    )
+    send_resp.raise_for_status()
     code = input("Enter the code emailed to you: ").strip()
     resp = api_post(scraper, f"{API_BASE}/v1/user-service/user/login", {"account": email, "code": code})
     token = resp.get("accessToken")
