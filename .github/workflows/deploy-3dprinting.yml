@@ -88,6 +88,10 @@ jobs:
             --include "printing.html" \
             --include "printing-config.js" \
             --include "printing-loader.js" \
+            --include "request.html" \
+            --include "request-loader.js" \
+            --include "admin.html" \
+            --include "admin-loader.js" \
             --include "robots.txt" \
             --include "output.stl" \
             --include "sample-box.stl"
@@ -102,7 +106,7 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ steps.stack.outputs.distribution_id }} \
-            --paths "/printing.html" "/printing-config.js" "/printing-loader.js" "/output.stl" "/sample-box.stl" "/css/*" "/js/*" "/assets/*" "/partials/*"
+            --paths "/printing.html" "/printing-config.js" "/printing-loader.js" "/request.html" "/request-loader.js" "/admin.html" "/admin-loader.js" "/output.stl" "/sample-box.stl" "/css/*" "/js/*" "/assets/*" "/partials/*"
 
       - name: Deployment summary
         run: |

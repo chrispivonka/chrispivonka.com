@@ -195,7 +195,11 @@ aws iam create-role \
         "lambda:EnableReplication*",
         "lambda:TagResource",
         "lambda:UntagResource",
-        "lambda:ListTags"
+        "lambda:ListTags",
+        "lambda:CreateFunctionUrlConfig",
+        "lambda:GetFunctionUrlConfig",
+        "lambda:UpdateFunctionUrlConfig",
+        "lambda:DeleteFunctionUrlConfig"
       ],
       "Resource": "arn:aws:lambda:us-east-1:*:function:printing3d-*"
     },
@@ -219,6 +223,22 @@ aws iam create-role \
         "iam:ListAttachedRolePolicies"
       ],
       "Resource": "arn:aws:iam::*:role/printing3d-*"
+    },
+    {
+      "Sid": "DynamoDB",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:UpdateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource",
+        "dynamodb:ListTagsOfResource",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:DescribeContinuousBackups"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:*:table/printing3d-*"
     },
     {
       "Sid": "SecretsManager",
@@ -580,6 +600,32 @@ then `docker compose up -d --build camera-relay`.
 
 ---
 
+## 9. Print Request Queue
+
+Any authenticated user (everyone on the OAuth allowlist) can submit a
+print request at `/request.html` — file upload (.3mf/.stl) plus material,
+color, quantity, priority, and notes. Requests land in a DynamoDB table
+(`RequestsTable` in the stack) and the uploaded file goes to
+`requests/{id}/{filename}` in the content bucket.
+
+`/admin.html` lists the queue with download links and status controls
+(mark complete / reject / reset to pending) — but only for addresses in
+the `AdminEmails` stack parameter (default: `chris@chrispivonka.com`).
+Everyone else gets a 403 message on that page; they can still submit
+requests, just not see or manage the queue. To add another admin,
+redeploy with `--parameter-overrides AdminEmails=you@x.com,other@y.com`.
+
+This is all automatic — no separate manual setup beyond the deploy
+pipeline. The backend is a second, regional Lambda (`ApiFunction`,
+distinct from the Lambda@Edge auth function) reached via `/api/*`,
+routed through the same Lambda@Edge auth check as everything else, then
+CloudFront forwards to the Lambda's Function URL via OAC (same
+signed-request pattern as the S3 origin — a direct request to the raw
+function URL, bypassing CloudFront, is rejected by AWS before reaching
+any of our code).
+
+---
+
 ## Verification Checklist
 
 - [ ] `https://3dprinting.chrispivonka.com` redirects to Google login
@@ -596,3 +642,7 @@ then `docker compose up -d --build camera-relay`.
 - [ ] Finishing a print archives that job's real 3MF model — clicking it in print history shows the actual model, not the bundled sample
 - [ ] `dig CAA 3dprinting.chrispivonka.com` shows the amazon.com restriction
 - [ ] WAF logs appear in CloudWatch under `aws-waf-logs-3dprinting.chrispivonka.com`
+- [ ] Submitting `/request.html` with a real .3mf/.stl succeeds and the file lands in `s3://<bucket>/requests/<id>/`
+- [ ] `/admin.html` as the admin email shows the submitted request; a non-admin allowed email gets the 403 message instead
+- [ ] Mark Complete / Reject / Reset to Pending on `/admin.html` actually updates status and persists on reload
+- [ ] Download link on `/admin.html` retrieves the real uploaded file

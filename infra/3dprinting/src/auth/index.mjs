@@ -260,13 +260,19 @@ function handleSignOut() {
  * Handle a regular request: validate session or redirect to Google OAuth.
  */
 function handleRequest(request) {
+  // Always strip any client-supplied value first — the request API trusts
+  // this header completely, so a viewer setting it directly must never
+  // survive to reach the origin. Only we may set it, below, from a
+  // decrypted+validated session.
+  delete request.headers["x-authenticated-email"];
+
   const cookies = parseCookies(request.headers);
   const sessionValue = cookies[SESSION_COOKIE];
 
   if (sessionValue) {
     const session = decrypt(sessionValue, COOKIE_ENCRYPTION_KEY, COOKIE_ENCRYPTION_KEYS_PREVIOUS);
     if (session && session.exp && session.exp > Math.floor(Date.now() / 1000)) {
-      // Valid session — pass through to S3 origin
+      request.headers["x-authenticated-email"] = [{ key: "X-Authenticated-Email", value: session.email }];
       return request;
     }
   }

@@ -31,6 +31,13 @@ Parameters:
       Space-separated CSP origins for frame-src. Defaults to YouTube since
       the camera relay (camera-relay/) pushes the printer's live feed to
       YouTube Live and the page embeds it via iframe.
+  AdminEmails:
+    Type: String
+    Default: "chris@chrispivonka.com"
+    Description: >-
+      Comma-separated emails allowed to view/manage print requests via the
+      admin API. Everyone on the OAuth allowlist can log in and submit a
+      request; only these addresses can list/update the queue.
 
 Conditions:
   HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
@@ -78,6 +85,17 @@ Resources:
             Status: Enabled
             NoncurrentVersionExpiration:
               NoncurrentDays: 30
+      # The request form's file upload PUTs directly to S3 via a presigned
+      # URL (a script-initiated cross-origin fetch from the CloudFront
+      # domain), which needs real CORS — unlike downloads, which redirect
+      # the browser via a plain <a href> and aren't subject to CORS at all.
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Sub "https://${DomainName}"
+            AllowedMethods: [PUT]
+            AllowedHeaders: ["Content-Type"]
+            MaxAge: 3000
 
   ContentBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -382,6 +400,83 @@ Resources:
               Resource: "arn:aws:logs:*:*:*"
 
   # ──────────────────────────────────────────────
+  # DynamoDB: Print Request Queue
+  # ──────────────────────────────────────────────
+  RequestsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
+  # ──────────────────────────────────────────────
+  # Lambda: Print Request API (regional, not @Edge — the auth Lambda
+  # gates access to this same as every other path; this one holds the
+  # actual submit/list/update business logic and needs DynamoDB + S3
+  # access that Lambda@Edge functions can't practically have)
+  # ──────────────────────────────────────────────
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs20.x
+      Handler: index.handler
+      CodeUri: src/api/
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref RequestsTable
+          BUCKET_NAME: !Ref ContentBucket
+          ADMIN_EMAILS: !Ref AdminEmails
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RequestsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub "${ContentBucket.Arn}/requests/*"
+
+  ApiFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt ApiFunction.Arn
+      AuthType: AWS_IAM
+
+  # Only CloudFront (via OAC/SigV4, scoped to this exact distribution) may
+  # invoke the function URL — a direct request to the raw *.lambda-url.*
+  # address is rejected by Lambda itself before reaching our code, so
+  # there's no way to bypass the Lambda@Edge auth check by going around
+  # CloudFront.
+  ApiFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: cloudfront.amazonaws.com
+      FunctionUrlAuthType: AWS_IAM
+      SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  LambdaOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: 3dprinting-lambda-oac
+        Description: OAC for the print-request API Lambda Function URL origin
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # ──────────────────────────────────────────────
   # CloudFront: Distribution
   # ──────────────────────────────────────────────
   Distribution:
@@ -410,7 +505,28 @@ Resources:
             OriginAccessControlId: !Ref OriginAccessControl
             S3OriginConfig:
               OriginAccessIdentity: ""
+          - Id: ApiOrigin
+            DomainName: !Select [2, !Split ["/", !GetAtt ApiFunctionUrl.FunctionUrl]]
+            OriginAccessControlId: !Ref LambdaOriginAccessControl
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
         CacheBehaviors:
+          # Print request API — never cache, forward everything (headers,
+          # cookies, body) since it's a real backend, not static content.
+          - PathPattern: "api/*"
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # CachingDisabled
+            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3 # AllViewer (managed)
+            LambdaFunctionAssociations:
+              - EventType: viewer-request
+                LambdaFunctionARN: !Ref AuthFunction.Version
+                IncludeBody: false
           # Telemetry is polled every 5s by the page — never cache it.
           - PathPattern: printer-status.json
             TargetOriginId: S3Origin
@@ -511,5 +627,8 @@ Outputs:
   ContentBucketName:
     Value: !Ref ContentBucket
     Description: S3 bucket for static content and printer telemetry
+  RequestsTableName:
+    Value: !Ref RequestsTable
+    Description: DynamoDB table backing the print request queue
   SiteUrl:
     Value: !Sub "https://${DomainName}"
