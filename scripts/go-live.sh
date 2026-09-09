@@ -33,7 +33,7 @@ if [[ "$URL" =~ youtube\.com/live/([a-zA-Z0-9_-]+) ]]; then
   VIDEO_ID="${BASH_REMATCH[1]}"
 elif [[ "$URL" =~ studio\.youtube\.com/video/([a-zA-Z0-9_-]+) ]]; then
   VIDEO_ID="${BASH_REMATCH[1]}"
-elif [[ "$URL" =~ [?&]v=([a-zA-Z0-9_-]+) ]]; then
+elif [[ "$URL" =~ [\?\&]v=([a-zA-Z0-9_-]+) ]]; then
   VIDEO_ID="${BASH_REMATCH[1]}"
 elif [[ "$URL" =~ youtu\.be/([a-zA-Z0-9_-]+) ]]; then
   VIDEO_ID="${BASH_REMATCH[1]}"
