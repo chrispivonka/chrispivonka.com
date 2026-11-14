@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Blog webhook relay: receives Notion integration webhooks and triggers the
+  "Publish Blog" GitHub workflow via repository_dispatch when a published
+  post changes. See SETUP.md.
+
+Parameters:
+  NotionDatabaseId:
+    Type: String
+    Description: ID of the Notion database that holds blog posts (32 hex chars, dashes optional)
+  GitHubRepo:
+    Type: String
+    Default: chrispivonka/chrispivonka.com
+  ParamPrefix:
+    Type: String
+    Default: /blog-webhook
+    Description: SSM Parameter Store prefix for the three SecureString secrets
+  StatusProperty:
+    Type: String
+    Default: Status
+  PublishedValue:
+    Type: String
+    Default: Published
+
+Resources:
+  RelayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: index.handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 15
+      # Caps cost if the public URL is ever hammered; Notion sends a trickle.
+      ReservedConcurrentExecutions: 2
+      Environment:
+        Variables:
+          NOTION_DATABASE_ID: !Ref NotionDatabaseId
+          GITHUB_REPO: !Ref GitHubRepo
+          PARAM_PREFIX: !Ref ParamPrefix
+          STATUS_PROPERTY: !Ref StatusProperty
+          PUBLISHED_VALUE: !Ref PublishedValue
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: ssm:GetParameters
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParamPrefix}/*"
+
+  RelayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${RelayFunction}"
+      RetentionInDays: 30
+
+  # Public URL: Notion can't sign AWS requests. Every event is authenticated
+  # in code with the HMAC-SHA256 X-Notion-Signature header instead.
+  RelayFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt RelayFunction.Arn
+      AuthType: NONE
+
+  RelayFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RelayFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  # Public function URLs also need lambda:InvokeFunction, scoped to URL calls.
+  RelayFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RelayFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+Outputs:
+  WebhookUrl:
+    Description: Paste this into the Notion integration's Webhooks tab
+    Value: !GetAtt RelayFunctionUrl.FunctionUrl
+  LogGroup:
+    Description: Where the one-time verification token is logged
+    Value: !Ref RelayLogGroup

@@ -7,3 +7,4 @@ User-agent: Googlebot
 Crawl-delay: 0
 
 Sitemap: https://chrispivonka.com/sitemap.xml
+Sitemap: https://chrispivonka.com/blog/sitemap.xml

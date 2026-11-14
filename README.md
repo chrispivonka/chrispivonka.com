@@ -8,6 +8,7 @@ Personal portfolio website for Chris Pivonka - Software Engineer specializing in
 ## Features
 
 - **Responsive Design** - Built with Bootstrap 5.2 for mobile-first, accessible layouts
+- **Blog** - Posts written in Notion, published to `/blog/` on a webhook (see [infra/blog-webhook/SETUP.md](infra/blog-webhook/SETUP.md))
 - **Contact Form** - Secure contact form with AWS Lambda backend and SES email integration
 - **Security Hardening** - CSRF protection, rate limiting, input validation, and security headers
 - **CI/CD Pipeline** - Automated testing, releases, and deployment with GitHub Actions
@@ -147,6 +148,8 @@ The following secrets are required for deployment:
 - `AWS_CLOUDFRONT_DISTRIBUTION_ID` - CloudFront distribution ID (optional)
 - `AUTOMATION_BOT_APP_ID` - GitHub App ID for auto-release (optional)
 - `AUTOMATION_BOT_PRIVATE_KEY` - GitHub App private key (optional)
+- `NOTION_TOKEN` - Notion integration secret for the blog build
+- `NOTION_DATABASE_ID` - Notion database holding blog posts
 
 ## Development Workflow
 

@@ -1,0 +1,1180 @@
+{
+ "_comment": "Sample Notion API data for previewing the blog locally and in tests. Not real posts.",
+ "pages": [
+  {
+   "page": {
+    "object": "page",
+    "id": "a3f9c21e-0000-4000-8000-000000000001",
+    "created_time": "2026-11-12T15:00:00.000Z",
+    "last_edited_time": "2026-11-12T18:00:00.000Z",
+    "archived": false,
+    "in_trash": false,
+    "properties": {
+     "Name": {
+      "id": "title",
+      "type": "title",
+      "title": [
+       {
+        "type": "text",
+        "plain_text": "Putting a cat camera behind Lambda@Edge auth",
+        "href": null,
+        "text": {
+         "content": "Putting a cat camera behind Lambda@Edge auth",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     },
+     "Status": {
+      "id": "st%3A",
+      "type": "status",
+      "status": {
+       "name": "Published"
+      }
+     },
+     "Slug": {
+      "id": "sl",
+      "type": "rich_text",
+      "rich_text": []
+     },
+     "Date": {
+      "id": "dt",
+      "type": "date",
+      "date": {
+       "start": "2026-11-12"
+      }
+     },
+     "Tags": {
+      "id": "tg",
+      "type": "multi_select",
+      "multi_select": [
+       {
+        "name": "AWS"
+       },
+       {
+        "name": "Lambda@Edge"
+       },
+       {
+        "name": "Homelab"
+       }
+      ]
+     },
+     "Summary": {
+      "id": "sm",
+      "type": "rich_text",
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "How I streamed a live camera through CloudFront without exposing the origin, and why the auth check runs at the edge instead of in my VPC.",
+        "href": null,
+        "text": {
+         "content": "How I streamed a live camera through CloudFront without exposing the origin, and why the auth check runs at the edge instead of in my VPC.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "blocks": [
+    {
+     "object": "block",
+     "id": "blk-1",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "The goal was simple: let a few people watch a live camera feed of my cats, without putting a public URL on the internet that anyone could scrape. The constraint that made it interesting was cost. I wanted ",
+        "href": null,
+        "text": {
+         "content": "The goal was simple: let a few people watch a live camera feed of my cats, without putting a public URL on the internet that anyone could scrape. The constraint that made it interesting was cost. I wanted ",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       },
+       {
+        "type": "text",
+        "plain_text": "zero always-on servers",
+        "href": null,
+        "text": {
+         "content": "zero always-on servers",
+         "link": null
+        },
+        "annotations": {
+         "bold": true,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       },
+       {
+        "type": "text",
+        "plain_text": ".",
+        "href": null,
+        "text": {
+         "content": ".",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-2",
+     "type": "heading_2",
+     "has_children": false,
+     "heading_2": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Why check auth at the edge",
+        "href": null,
+        "text": {
+         "content": "Why check auth at the edge",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-3",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "CloudFront already sits in front of the stream. If the token check happens in a ",
+        "href": null,
+        "text": {
+         "content": "CloudFront already sits in front of the stream. If the token check happens in a ",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       },
+       {
+        "type": "text",
+        "plain_text": "viewer-request",
+        "href": null,
+        "text": {
+         "content": "viewer-request",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": true,
+         "color": "default"
+        }
+       },
+       {
+        "type": "text",
+        "plain_text": " Lambda@Edge function, unauthorized requests never reach the origin, never cost origin bandwidth, and get rejected close to the viewer.",
+        "href": null,
+        "text": {
+         "content": " Lambda@Edge function, unauthorized requests never reach the origin, never cost origin bandwidth, and get rejected close to the viewer.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-4",
+     "type": "code",
+     "has_children": false,
+     "code": {
+      "language": "javascript",
+      "caption": [
+       {
+        "type": "text",
+        "plain_text": "edge/auth-interceptor.js",
+        "href": null,
+        "text": {
+         "content": "edge/auth-interceptor.js",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ],
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "exports.handler = async (event) => {\n  const request = event.Records[0].cf.request;\n  const token = request.headers[\"x-auth-token\"]?.[0]?.value;\n  if (!token || !verifySignature(token)) {\n    return { status: \"401\", statusDescription: \"Unauthorized\" };\n  }\n  return request; // pass through to origin\n};",
+        "href": null,
+        "text": {
+         "content": "exports.handler = async (event) => {\n  const request = event.Records[0].cf.request;\n  const token = request.headers[\"x-auth-token\"]?.[0]?.value;\n  if (!token || !verifySignature(token)) {\n    return { status: \"401\", statusDescription: \"Unauthorized\" };\n  }\n  return request; // pass through to origin\n};",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-5",
+     "type": "callout",
+     "has_children": false,
+     "callout": {
+      "icon": {
+       "type": "emoji",
+       "emoji": "⚠️"
+      },
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Lambda@Edge functions must be deployed in us-east-1 and cannot read environment variables. I bake the public key into the bundle at build time.",
+        "href": null,
+        "text": {
+         "content": "Lambda@Edge functions must be deployed in us-east-1 and cannot read environment variables. I bake the public key into the bundle at build time.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-6",
+     "type": "heading_2",
+     "has_children": false,
+     "heading_2": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Adding OAuth2 for viewers",
+        "href": null,
+        "text": {
+         "content": "Adding OAuth2 for viewers",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-7",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Signed tokens solve the origin problem, but someone still has to issue them. A small OAuth2 flow handles login and sets a short-lived cookie that the edge function trusts.",
+        "href": null,
+        "text": {
+         "content": "Signed tokens solve the origin problem, but someone still has to issue them. A small OAuth2 flow handles login and sets a short-lived cookie that the edge function trusts.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-8",
+     "type": "bulleted_list_item",
+     "has_children": false,
+     "bulleted_list_item": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Tokens live for 15 minutes and refresh silently.",
+        "href": null,
+        "text": {
+         "content": "Tokens live for 15 minutes and refresh silently.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-9",
+     "type": "bulleted_list_item",
+     "has_children": false,
+     "bulleted_list_item": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "The allow-list is a single file, so adding a viewer is one line.",
+        "href": null,
+        "text": {
+         "content": "The allow-list is a single file, so adding a viewer is one line.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-10",
+     "type": "bulleted_list_item",
+     "has_children": false,
+     "bulleted_list_item": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Everything is defined in one SAM template, so a fresh account is one deploy away.",
+        "href": null,
+        "text": {
+         "content": "Everything is defined in one SAM template, so a fresh account is one deploy away.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-11",
+     "type": "heading_2",
+     "has_children": false,
+     "heading_2": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "What it costs",
+        "href": null,
+        "text": {
+         "content": "What it costs",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-12",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Most months it rounds to a few dollars, almost all of it CloudFront egress while someone is actually watching.",
+        "href": null,
+        "text": {
+         "content": "Most months it rounds to a few dollars, almost all of it CloudFront egress while someone is actually watching.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-13",
+     "type": "quote",
+     "has_children": false,
+     "quote": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Sample post used to preview the blog layout. Real posts come from Notion.",
+        "href": null,
+        "text": {
+         "content": "Sample post used to preview the blog layout. Real posts come from Notion.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "page": {
+    "object": "page",
+    "id": "7be04d8a-0000-4000-8000-000000000002",
+    "created_time": "2026-10-28T15:00:00.000Z",
+    "last_edited_time": "2026-10-28T18:00:00.000Z",
+    "archived": false,
+    "in_trash": false,
+    "properties": {
+     "Name": {
+      "id": "title",
+      "type": "title",
+      "title": [
+       {
+        "type": "text",
+        "plain_text": "A 196-test CI gate for a static site",
+        "href": null,
+        "text": {
+         "content": "A 196-test CI gate for a static site",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     },
+     "Status": {
+      "id": "st%3A",
+      "type": "status",
+      "status": {
+       "name": "Published"
+      }
+     },
+     "Slug": {
+      "id": "sl",
+      "type": "rich_text",
+      "rich_text": []
+     },
+     "Date": {
+      "id": "dt",
+      "type": "date",
+      "date": {
+       "start": "2026-10-28"
+      }
+     },
+     "Tags": {
+      "id": "tg",
+      "type": "multi_select",
+      "multi_select": [
+       {
+        "name": "CI-CD"
+       },
+       {
+        "name": "GitHub Actions"
+       }
+      ]
+     },
+     "Summary": {
+      "id": "sm",
+      "type": "rich_text",
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Jest, Lighthouse budgets, Gitleaks and CSP validation all have to pass before release-please cuts a version. Here is the pipeline and what it has caught.",
+        "href": null,
+        "text": {
+         "content": "Jest, Lighthouse budgets, Gitleaks and CSP validation all have to pass before release-please cuts a version. Here is the pipeline and what it has caught.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "blocks": [
+    {
+     "object": "block",
+     "id": "blk-14",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Sample post body.",
+        "href": null,
+        "text": {
+         "content": "Sample post body.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-15",
+     "type": "heading_2",
+     "has_children": false,
+     "heading_2": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "The pipeline",
+        "href": null,
+        "text": {
+         "content": "The pipeline",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "object": "block",
+     "id": "blk-16",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Sample post body.",
+        "href": null,
+        "text": {
+         "content": "Sample post body.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "page": {
+    "object": "page",
+    "id": "19dd6ae0-0000-4000-8000-000000000003",
+    "created_time": "2026-10-09T15:00:00.000Z",
+    "last_edited_time": "2026-10-09T18:00:00.000Z",
+    "archived": false,
+    "in_trash": false,
+    "properties": {
+     "Name": {
+      "id": "title",
+      "type": "title",
+      "title": [
+       {
+        "type": "text",
+        "plain_text": "Read-through caching in Redis: the parts tutorials skip",
+        "href": null,
+        "text": {
+         "content": "Read-through caching in Redis: the parts tutorials skip",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     },
+     "Status": {
+      "id": "st%3A",
+      "type": "status",
+      "status": {
+       "name": "Published"
+      }
+     },
+     "Slug": {
+      "id": "sl",
+      "type": "rich_text",
+      "rich_text": []
+     },
+     "Date": {
+      "id": "dt",
+      "type": "date",
+      "date": {
+       "start": "2026-10-09"
+      }
+     },
+     "Tags": {
+      "id": "tg",
+      "type": "multi_select",
+      "multi_select": [
+       {
+        "name": "Performance"
+       },
+       {
+        "name": "Redis"
+       }
+      ]
+     },
+     "Summary": {
+      "id": "sm",
+      "type": "rich_text",
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Stampedes, TTL jitter, and what happens to p99 when the cache cluster fails over during a big on-sale.",
+        "href": null,
+        "text": {
+         "content": "Stampedes, TTL jitter, and what happens to p99 when the cache cluster fails over during a big on-sale.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "blocks": [
+    {
+     "object": "block",
+     "id": "blk-17",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Sample post body.",
+        "href": null,
+        "text": {
+         "content": "Sample post body.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "page": {
+    "object": "page",
+    "id": "c40e1170-0000-4000-8000-000000000004",
+    "created_time": "2026-09-17T15:00:00.000Z",
+    "last_edited_time": "2026-09-17T18:00:00.000Z",
+    "archived": false,
+    "in_trash": false,
+    "properties": {
+     "Name": {
+      "id": "title",
+      "type": "title",
+      "title": [
+       {
+        "type": "text",
+        "plain_text": "Mentoring across seniority levels without a second job",
+        "href": null,
+        "text": {
+         "content": "Mentoring across seniority levels without a second job",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     },
+     "Status": {
+      "id": "st%3A",
+      "type": "status",
+      "status": {
+       "name": "Published"
+      }
+     },
+     "Slug": {
+      "id": "sl",
+      "type": "rich_text",
+      "rich_text": []
+     },
+     "Date": {
+      "id": "dt",
+      "type": "date",
+      "date": {
+       "start": "2026-09-17"
+      }
+     },
+     "Tags": {
+      "id": "tg",
+      "type": "multi_select",
+      "multi_select": [
+       {
+        "name": "Leadership"
+       }
+      ]
+     },
+     "Summary": {
+      "id": "sm",
+      "type": "rich_text",
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "The weekly structure I use as a tech lead to keep juniors unblocked and seniors growing.",
+        "href": null,
+        "text": {
+         "content": "The weekly structure I use as a tech lead to keep juniors unblocked and seniors growing.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "blocks": [
+    {
+     "object": "block",
+     "id": "blk-18",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Sample post body.",
+        "href": null,
+        "text": {
+         "content": "Sample post body.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "page": {
+    "object": "page",
+    "id": "d55a2f10-0000-4000-8000-000000000005",
+    "created_time": "2026-08-30T15:00:00.000Z",
+    "last_edited_time": "2026-08-30T18:00:00.000Z",
+    "archived": false,
+    "in_trash": false,
+    "properties": {
+     "Name": {
+      "id": "title",
+      "type": "title",
+      "title": [
+       {
+        "type": "text",
+        "plain_text": "Publishing 3D printer status to S3 every 30 seconds",
+        "href": null,
+        "text": {
+         "content": "Publishing 3D printer status to S3 every 30 seconds",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     },
+     "Status": {
+      "id": "st%3A",
+      "type": "status",
+      "status": {
+       "name": "Published"
+      }
+     },
+     "Slug": {
+      "id": "sl",
+      "type": "rich_text",
+      "rich_text": []
+     },
+     "Date": {
+      "id": "dt",
+      "type": "date",
+      "date": {
+       "start": "2026-08-30"
+      }
+     },
+     "Tags": {
+      "id": "tg",
+      "type": "multi_select",
+      "multi_select": [
+       {
+        "name": "Homelab"
+       },
+       {
+        "name": "Python"
+       }
+      ]
+     },
+     "Summary": {
+      "id": "sm",
+      "type": "rich_text",
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "A tiny Python worker, a JSON file, and a static page. No servers to babysit.",
+        "href": null,
+        "text": {
+         "content": "A tiny Python worker, a JSON file, and a static page. No servers to babysit.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "blocks": [
+    {
+     "object": "block",
+     "id": "blk-19",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Sample post body.",
+        "href": null,
+        "text": {
+         "content": "Sample post body.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "page": {
+    "object": "page",
+    "id": "e0000000-0000-4000-8000-000000000006",
+    "created_time": "2026-11-13T15:00:00.000Z",
+    "last_edited_time": "2026-11-13T18:00:00.000Z",
+    "archived": false,
+    "in_trash": false,
+    "properties": {
+     "Name": {
+      "id": "title",
+      "type": "title",
+      "title": [
+       {
+        "type": "text",
+        "plain_text": "Draft: notes on on-call rotations",
+        "href": null,
+        "text": {
+         "content": "Draft: notes on on-call rotations",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     },
+     "Status": {
+      "id": "st%3A",
+      "type": "status",
+      "status": {
+       "name": "Draft"
+      }
+     },
+     "Slug": {
+      "id": "sl",
+      "type": "rich_text",
+      "rich_text": []
+     },
+     "Date": {
+      "id": "dt",
+      "type": "date",
+      "date": {
+       "start": "2026-11-13"
+      }
+     },
+     "Tags": {
+      "id": "tg",
+      "type": "multi_select",
+      "multi_select": [
+       {
+        "name": "Leadership"
+       }
+      ]
+     },
+     "Summary": {
+      "id": "sm",
+      "type": "rich_text",
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Not published yet.",
+        "href": null,
+        "text": {
+         "content": "Not published yet.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "blocks": [
+    {
+     "object": "block",
+     "id": "blk-20",
+     "type": "paragraph",
+     "has_children": false,
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "plain_text": "Draft.",
+        "href": null,
+        "text": {
+         "content": "Draft.",
+         "link": null
+        },
+        "annotations": {
+         "bold": false,
+         "italic": false,
+         "strikethrough": false,
+         "underline": false,
+         "code": false,
+         "color": "default"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -269,3 +269,5 @@ trivy-results.sarif
 
 # AI assistants
 .claude/
+# Generated blog (built from Notion by scripts/build-blog.mjs)
+/blog/
