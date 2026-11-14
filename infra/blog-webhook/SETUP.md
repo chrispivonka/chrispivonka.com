@@ -45,12 +45,16 @@ toggles, tables, bookmarks and embeds (rendered as links), and columns.
 The database ID is the 32-character hex string in the database URL:
 `notion.so/<workspace>/<DATABASE_ID>?v=...`
 
-## 2. Notion integration
+## 2. Notion connection (integration)
 
-1. Go to <https://www.notion.so/profile/integrations> and create an **internal** integration.
-2. Capabilities: **Read content** only.
-3. Copy the **Internal Integration Secret** (`ntn_...`).
-4. Open the Blog database → `•••` → **Connections** → add the integration.
+Notion now calls integrations "connections". You must be a workspace owner.
+
+1. Go to the developer portal: <https://app.notion.com/developers/connections>.
+2. In the sidebar under **Build**, choose **Internal connections** → **Create a new connection**.
+   Name it (e.g. `Blog publisher`) and pick your workspace.
+3. Open the **Configuration** tab: give it read-content access only, and copy the **API token**.
+4. Give it access to the Blog database: either the connection's **Content access** tab →
+   **Edit access**, or in Notion open the database → `•••` → **Connections** → **+ Add connection**.
 
 ## 3. GitHub
 
@@ -58,7 +62,7 @@ The database ID is the 32-character hex string in the database URL:
    `chrispivonka/chrispivonka.com` and the permission **Contents: Read and write**
    (required by the repository_dispatch API). Give it an expiry and a reminder.
 2. Add repository secrets (Settings → Secrets and variables → Actions):
-   - `NOTION_TOKEN`: the integration secret
+   - `NOTION_TOKEN`: the connection's API token
    - `NOTION_DATABASE_ID`: the database ID
 
 The workflow reuses the existing `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
@@ -69,7 +73,7 @@ The workflow reuses the existing `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
 Run in the region you deploy to (samconfig.toml uses `us-west-2`):
 
 ```bash
-aws ssm put-parameter --name /blog-webhook/notion-token --type SecureString --value 'ntn_...'
+aws ssm put-parameter --name /blog-webhook/notion-token --type SecureString --value '<notion API token>'
 aws ssm put-parameter --name /blog-webhook/github-token --type SecureString --value 'github_pat_...'
 # Placeholder until Notion sends the real value in step 6
 aws ssm put-parameter --name /blog-webhook/notion-verification-token --type SecureString --value pending
@@ -87,7 +91,7 @@ Copy the `WebhookUrl` output.
 
 ## 6. Notion webhook subscription
 
-1. In the integration settings, open **Webhooks** → **Create a subscription**.
+1. In the connection's settings in the developer portal, open **Webhooks** → **Create a subscription**.
 2. URL: the `WebhookUrl` from step 5.
 3. Events: `page.created`, `page.properties_updated`, `page.content_updated`,
    `page.deleted`, `page.undeleted`, `page.moved`.
