@@ -1,0 +1,6 @@
+{
+  "name": "blog-webhook-relay",
+  "private": true,
+  "type": "module",
+  "description": "Notion webhook to GitHub repository_dispatch relay. Uses the AWS SDK bundled with the Lambda runtime."
+}

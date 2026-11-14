@@ -40,6 +40,8 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
+      # blog/ is generated from Notion and deployed by publish-blog.yml.
+      # The exclude keeps "*.html" + --delete from wiping the live posts.
       - name: Sync files to S3
         if: env.HAS_AWS_CREDENTIALS == 'true'
         run: |
@@ -55,6 +57,7 @@ jobs:
             --include "manifest.json" \
             --include ".well-known/*" \
             --include "subdomains/**" \
+            --exclude "blog/*" \
             --delete
 
       - name: Invalidate CloudFront distribution

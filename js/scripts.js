@@ -740,6 +740,8 @@ function initCommandPalette() {
       if (dest) {
         dest.scrollIntoView({ behavior: "smooth" });
       }
+    } else if (action === "navigate" && href) {
+      window.location.href = href;
     } else if (action === "link" && href) {
       window.open(href, "_blank", "noopener,noreferrer");
     } else if (action === "mailto" && href) {

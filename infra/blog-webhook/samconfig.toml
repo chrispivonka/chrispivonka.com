@@ -1,0 +1,16 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "blog-webhook"
+region = "us-west-2"
+resolve_s3 = true
+s3_prefix = "blog-webhook"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+parameter_overrides = [
+  "NotionDatabaseId=REPLACE_WITH_NOTION_DATABASE_ID",
+]
+
+[default.build.parameters]
+use_container = false

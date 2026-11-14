@@ -1,0 +1,88 @@
+name: Publish Blog
+
+# Builds blog/ from the Notion database and deploys it to S3 + CloudFront.
+# Triggered by the Notion webhook relay (infra/blog-webhook) when a post is
+# published, edited or unpublished; also runnable by hand from the Actions tab.
+
+on:
+  repository_dispatch:
+    types: [notion-publish]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/build-blog.mjs"
+      - "scripts/blog/**"
+      - ".github/workflows/publish-blog.yml"
+
+permissions:
+  contents: read
+
+# Bursts of Notion edits collapse into one run with the newest content.
+concurrency:
+  group: publish-blog
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    name: Build and deploy blog
+    env:
+      HAS_NOTION: ${{ secrets.NOTION_TOKEN != '' && secrets.NOTION_DATABASE_ID != '' }}
+      HAS_AWS_CREDENTIALS: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+      HAS_CLOUDFRONT: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID != '' }}
+
+    steps:
+      - name: Log trigger
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NOTION_EVENT: ${{ github.event.client_payload.notion_event }}
+          REASON: ${{ github.event.client_payload.reason }}
+        run: |
+          echo "Event: $EVENT_NAME"
+          echo "Notion event: $NOTION_EVENT"
+          echo "Reason: $REASON"
+
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Check Notion secrets
+        if: env.HAS_NOTION != 'true'
+        run: |
+          echo "::error::Set NOTION_TOKEN and NOTION_DATABASE_ID repository secrets (see infra/blog-webhook/SETUP.md)"
+          exit 1
+
+      - name: Build blog from Notion
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+        run: node scripts/build-blog.mjs
+
+      - name: Configure AWS Credentials
+        if: env.HAS_AWS_CREDENTIALS == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Sync blog to S3
+        if: env.HAS_AWS_CREDENTIALS == 'true'
+        run: |
+          # Images are content-hashed, so they can be cached for a long time.
+          aws s3 sync blog/images/ s3://${{ secrets.AWS_S3_BUCKET }}/blog/images/ \
+            --cache-control "public, max-age=31536000, immutable" --delete
+          aws s3 sync blog/ s3://${{ secrets.AWS_S3_BUCKET }}/blog/ \
+            --exclude "images/*" --cache-control "public, max-age=300" --delete
+
+      - name: Invalidate CloudFront
+        if: env.HAS_CLOUDFRONT == 'true'
+        continue-on-error: true
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/blog/*"
