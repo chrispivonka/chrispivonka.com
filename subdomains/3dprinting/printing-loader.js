@@ -13,6 +13,11 @@ const PRODUCTION_NS = "http://schemas.microsoft.com/3dmanufacturing/production/2
 const MODEL_COLORS = [0x58a6ff, 0x3fb950, 0xbc8cff, 0xd29922, 0xf778ba, 0x39c5cf];
 
 let pollTimer = null;
+
+/** A job is loaded on the printer (printing or paused mid-print). */
+function hasActiveJob(telemetry) {
+  return Boolean(telemetry) && (telemetry.status === "PRINTING" || telemetry.status === "PAUSED");
+}
 let latestTelemetry = null;
 
 // What the viewport is showing.
@@ -536,7 +541,7 @@ function liveViewKey(telemetry) {
 
 /** What to show when nobody picked anything: the current job, else the most recent print. */
 function liveEntry(telemetry) {
-  if (telemetry.status === "PRINTING" || telemetry.modelUrl || telemetry.thumbnailUrl) {
+  if (hasActiveJob(telemetry) || telemetry.modelUrl || telemetry.thumbnailUrl) {
     return { ...telemetry, title: telemetry.title || telemetry.fileName };
   }
   const last = (telemetry.printHistory || [])[0];
@@ -576,7 +581,7 @@ function renderLiveJobCard(telemetry) {
   if (!container) {
     return;
   }
-  if (!telemetry || telemetry.status !== "PRINTING") {
+  if (!hasActiveJob(telemetry)) {
     container.style.display = "none";
     return;
   }
@@ -590,8 +595,8 @@ function renderLiveJobCard(telemetry) {
   container.innerHTML = `
     <div class="live-job-card">
       <div class="job-header">
-        <span class="job-title"><i class="bi bi-play-circle-fill" style="color: var(--green);"></i> ${escapeHtml(jobTitle({ title: telemetry.title || telemetry.fileName }))}</span>
-        <span class="job-percent">${pct}%</span>
+        <span class="job-title"><i class="bi ${telemetry.status === "PAUSED" ? "bi-pause-circle-fill" : "bi-play-circle-fill"}" style="color: ${telemetry.status === "PAUSED" ? "var(--yellow)" : "var(--green)"};"></i> ${escapeHtml(jobTitle({ title: telemetry.title || telemetry.fileName }))}</span>
+        <span class="job-percent">${telemetry.status === "PAUSED" ? "PAUSED · " : ""}${pct}%</span>
       </div>
       <div class="progress-track">
         <div class="progress-fill" style="width: ${pct}%;"></div>
@@ -616,7 +621,7 @@ function renderSpecs(telemetry) {
   const status = telemetry ? telemetry.status : "OFFLINE";
   const isPrinting = status === "PRINTING";
   const statusLabel = { PRINTING: "PRINTING LIVE", PAUSED: "PAUSED", IDLE: "IDLE" }[status] || "OFFLINE";
-  const current = telemetry && isPrinting ? jobTitle({ title: telemetry.title || telemetry.fileName }) : "—";
+  const current = hasActiveJob(telemetry) ? jobTitle({ title: telemetry.title || telemetry.fileName }) : "—";
   const withTarget = (val, target) => (val ? `${val}${target ? ` (target ${target})` : ""}` : "—");
 
   const specsList = [
@@ -629,7 +634,7 @@ function renderSpecs(telemetry) {
   specsContainer.innerHTML = specsList.map(spec => `
     <div class="spec-card">
       <span class="spec-label">${spec.label}</span>
-      <span class="spec-val" style="${spec.label === "status" && isPrinting ? "color: var(--green);" : ""}">${escapeHtml(spec.value)}</span>
+      <span class="spec-val" style="${spec.label === "status" && isPrinting ? "color: var(--green);" : (spec.label === "status" && status === "PAUSED" ? "color: var(--yellow);" : "")}">${escapeHtml(spec.value)}</span>
     </div>
   `).join("");
 }
