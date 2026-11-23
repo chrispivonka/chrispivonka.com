@@ -11,8 +11,9 @@ Supports two connection modes:
     account. Use this if you want to keep the printer on Bambu Cloud mode
     (Bambu Handy, remote access, etc.) instead of switching to LAN-only +
     Developer Mode. Requires running bambu_cloud_login.py once first (see
-    below) — no live 3D model preview during printing, since that needs
-    local FTPS access which cloud mode doesn't have.
+    below). There's no live 3D model in this mode, since that needs local
+    FTPS access, so print history (real project names, filament used,
+    plate preview images) comes from Bambu's cloud task list instead.
 
   lan — connects directly to the printer's local MQTT broker. Requires
     LAN-only mode + Developer Mode enabled on the printer (which disconnects
@@ -53,6 +54,7 @@ faking a video feed.
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -75,6 +77,11 @@ try:
 except ImportError:
     mqtt = None
 
+try:
+    import cloudscraper
+except ImportError:
+    cloudscraper = None
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -91,6 +98,23 @@ DEFAULT_CLOUD_TOKEN_PATH = Path(os.environ.get(
     str(Path(__file__).with_name(".bambu-cloud-token.json")),
 ))
 PUBLISH_INTERVAL_SEC = 3
+CLOUD_TASK_SYNC_INTERVAL_SEC = 600  # how often to refresh print history from Bambu's cloud task list
+CLOUD_API_BASE = "https://api.bambulab.com"
+# Same OrcaSlicer client identity bambu_cloud_login.py uses to get past
+# Bambu's Cloudflare bot protection.
+CLOUD_API_HEADERS = {
+    "User-Agent": "bambu_network_agent/01.09.05.01",
+    "X-BBL-Client-Name": "OrcaSlicer",
+    "X-BBL-Client-Type": "slicer",
+    "X-BBL-Client-Version": "01.09.05.51",
+    "X-BBL-Language": "en-US",
+    "X-BBL-OS-Type": "linux",
+    "X-BBL-OS-Version": "6.2.0",
+    "X-BBL-Agent-Version": "01.09.05.01",
+    "X-BBL-Executable-info": "{}",
+    "X-BBL-Agent-OS-Type": "linux",
+    "Accept": "application/json",
+}
 PUSHALL_INTERVAL_SEC = 120  # re-request full state periodically in case a delta was missed
 MAX_HISTORY = 20
 
@@ -115,6 +139,19 @@ def fmt_temp(value):
         return None
 
 
+def iso_utc(dt=None):
+    return (dt or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def job_display_name(raw):
+    """
+    The printer's gcode_file is often a meaningless internal path
+    ("/data/Metadata/plate_1.gcode" for every cloud print). subtask_name is
+    the project name shown in Bambu Studio/Handy, so prefer it.
+    """
+    return (raw or {}).get("subtask_name") or (raw or {}).get("gcode_file") or "Unknown job"
+
+
 def fmt_duration(seconds):
     seconds = max(0, int(seconds))
     h, rem = divmod(seconds, 3600)
@@ -133,8 +170,12 @@ class PrinterState:
         self.raw = {}
         self.print_start = None
         self.last_gcode_file = None
+        self.job_key = None
+        self.last_active_material = None
         self.history = self._load_history()
         self.stream_url = stream_url
+        self.started_at = iso_utc()
+        self.thumbnail_url = None  # set from the cloud task list when available
 
     def _load_history(self):
         if STATE_FILE.exists():
@@ -160,11 +201,31 @@ class PrinterState:
         gcode_state = self.raw.get("gcode_state")
         gcode_file = self.raw.get("gcode_file")
 
+        # Cloud prints all share gcode_file paths like
+        # /data/Metadata/plate_1.gcode, so identify a job by its task ids and
+        # project name too. A new job must drop the previous job's live model,
+        # or the viewer (and the history archive) shows the wrong print.
+        job_key = (
+            self.raw.get("task_id"), self.raw.get("subtask_id"),
+            self.raw.get("subtask_name"), gcode_file,
+        )
+        if gcode_file and job_key != self.job_key:
+            self.job_key = job_key
+            self.last_gcode_file = gcode_file
+            self.raw.pop("_live_model_key", None)
+            self.thumbnail_url = None
+            self.last_active_material = None
+            self.print_start = time.time() if gcode_state == "RUNNING" else None
+
         if gcode_state == "RUNNING" and self.print_start is None:
             self.print_start = time.time()
-        if gcode_file and gcode_file != self.last_gcode_file:
-            self.last_gcode_file = gcode_file
-            self.print_start = time.time() if gcode_state == "RUNNING" else self.print_start
+
+        # The AMS reports no active tray once a print finishes, so remember the
+        # material while it's printing.
+        if gcode_state in ("RUNNING", "PREPARE", "PAUSE"):
+            for slot in self.active_ams_slots():
+                if slot.get("active"):
+                    self.last_active_material = slot.get("material")
 
         if gcode_state in ("FINISH", "FAILED") and self.print_start is not None:
             entry = self._record_completed_job(gcode_state)
@@ -174,20 +235,16 @@ class PrinterState:
 
     def _record_completed_job(self, gcode_state):
         elapsed = time.time() - self.print_start
-        active_material = None
-        for slot in self.active_ams_slots():
-            if slot.get("active"):
-                active_material = slot.get("material")
-                break
-
         entry = {
             "id": f"job-{int(time.time())}",
-            "name": self.last_gcode_file or "Unknown job",
-            "modelName": self.last_gcode_file or "Unknown job",
+            "title": job_display_name(self.raw),
+            "name": job_display_name(self.raw),
+            "fileName": self.last_gcode_file,
             "modelUrl": None,  # set by _archive_completed_model if the live model was captured
-            "material": active_material or "Unknown",
+            "thumbnailUrl": self.thumbnail_url,
+            "material": self.last_active_material or "Unknown",
             "printTime": fmt_duration(elapsed),
-            "completedAt": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+            "completedAt": iso_utc(),
             "status": "COMPLETED" if gcode_state == "FINISH" else "FAILED",
         }
         self.history.insert(0, entry)
@@ -226,9 +283,11 @@ class PrinterState:
         return {
             "status": status,
             "printerModel": "Bambu Lab",
-            "fileName": self.raw.get("subtask_name") or self.raw.get("gcode_file"),
+            "title": job_display_name(self.raw),
+            "fileName": job_display_name(self.raw),
             "modelName": self.raw.get("gcode_file"),
             "modelUrl": None,
+            "thumbnailUrl": self.thumbnail_url,
             "progressPercent": self.raw.get("mc_percent"),
             "currentLayer": self.raw.get("layer_num"),
             "totalLayers": self.raw.get("total_layer_num"),
@@ -246,6 +305,7 @@ class PrinterState:
             "snapshotUrl": None,
             "streamUrl": self.stream_url,
             "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "publisherStartedAt": self.started_at,
         }
 
 
@@ -298,7 +358,7 @@ def load_cloud_token(token_path):
     return f"u_{uid}", access_token
 
 
-def try_fetch_current_3mf(host, access_code, gcode_file):
+def try_fetch_current_3mf(host, access_code, gcode_file, subtask_name=None):
     """
     Best-effort: pull the active print's .3mf project file off the printer's
     SD card over FTPS so the site's 3D viewer can render the real model
@@ -309,7 +369,10 @@ def try_fetch_current_3mf(host, access_code, gcode_file):
     """
     if not gcode_file:
         return None
-    candidates = [gcode_file, gcode_file.replace(".gcode", ".gcode.3mf")]
+    base = gcode_file.rsplit("/", 1)[-1]
+    candidates = [base, base.replace(".gcode", ".gcode.3mf")]
+    if subtask_name:
+        candidates = [f"{subtask_name}.gcode.3mf", f"{subtask_name}.3mf"] + candidates
     try:
         ftps = FTP_TLS()
         ftps.connect(host, FTPS_PORT, timeout=10)
@@ -322,7 +385,7 @@ def try_fetch_current_3mf(host, access_code, gcode_file):
                 continue
             names = ftps.nlst()
             for candidate in candidates:
-                match = next((n for n in names if n.endswith(candidate) or candidate.endswith(n)), None)
+                match = next((n for n in names if n.rsplit("/", 1)[-1] == candidate), None)
                 if match:
                     buf = bytearray()
                     ftps.retrbinary(f"RETR {match}", buf.extend)
@@ -332,6 +395,149 @@ def try_fetch_current_3mf(host, access_code, gcode_file):
     except Exception as e:
         log.debug("FTPS model fetch skipped: %s", e)
     return None
+
+
+# Bambu cloud task status codes, as seen in /v1/user-service/my/tasks.
+# Anything else (e.g. still printing) is left out of the history.
+CLOUD_TASK_STATUS = {2: "COMPLETED", 3: "FAILED"}
+
+
+def parse_cloud_time(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def cloud_task_material(task):
+    """'PLA', or 'PLA + PETG' for multi-material prints, from the task's AMS mapping."""
+    types = []
+    for slot in task.get("amsDetailMapping") or []:
+        kind = slot.get("filamentType") or slot.get("targetFilamentType")
+        if kind and kind not in types:
+            types.append(kind)
+    return " + ".join(types) or "Unknown"
+
+
+def cloud_task_to_entry(task):
+    """Map one Bambu cloud task to a print-history entry, or None if it isn't finished."""
+    status = CLOUD_TASK_STATUS.get(task.get("status"))
+    if not status or task.get("id") is None:
+        return None
+    end = parse_cloud_time(task.get("endTime"))
+    start = parse_cloud_time(task.get("startTime"))
+    cost = task.get("costTime")
+    if not cost and start and end:
+        cost = (end - start).total_seconds()
+    weight = task.get("weight")
+    return {
+        "id": f"task-{task['id']}",
+        "title": task.get("title") or task.get("designTitle") or "Untitled print",
+        "name": task.get("title") or task.get("designTitle") or "Untitled print",
+        "plate": task.get("plateName") or (f"Plate {task['plateIndex']}" if task.get("plateIndex") else None),
+        "modelUrl": None,
+        "thumbnailUrl": None,  # filled in once the cover image is mirrored to S3
+        "material": cloud_task_material(task),
+        "printTime": fmt_duration(cost) if cost else None,
+        "filamentWeight": f"{float(weight):.1f}g" if weight else None,
+        "completedAt": iso_utc(end) if end else None,
+        "status": status,
+    }
+
+
+class BambuCloudTasks:
+    """
+    Reads the printer's print history from Bambu's cloud task list (the same
+    list Bambu Handy shows). In cloud mode this is the only source of real
+    project names, filament usage and plate preview images: the printer's
+    MQTT report just says /data/Metadata/plate_N.gcode, and there's no FTPS
+    access to fetch the model itself.
+
+    Like bambu_cloud_login.py, this is a reverse-engineered, unofficial API.
+    Every failure here is non-fatal: the publisher falls back to the history
+    it records itself from MQTT.
+    """
+
+    def __init__(self, access_token, serial, s3, bucket):
+        self.access_token = access_token
+        self.serial = serial
+        self.s3 = s3
+        self.bucket = bucket
+        self.session = cloudscraper.create_scraper() if cloudscraper else None
+        self._mirrored = set()
+
+    def fetch_tasks(self, limit=MAX_HISTORY + 5):
+        if not self.session:
+            log.warning("cloudscraper isn't installed, so cloud print history is unavailable")
+            return None
+        try:
+            resp = self.session.get(
+                f"{CLOUD_API_BASE}/v1/user-service/my/tasks",
+                params={"deviceId": self.serial, "limit": limit},
+                headers={**CLOUD_API_HEADERS, "Authorization": f"Bearer {self.access_token}"},
+                timeout=20,
+            )
+            resp.raise_for_status()
+            hits = resp.json().get("hits") or []
+        except Exception as e:
+            log.warning("Could not fetch cloud print history: %s", e)
+            return None
+        # The endpoint can return tasks for every printer on the account.
+        return [t for t in hits if not t.get("deviceId") or t.get("deviceId") == self.serial]
+
+    def mirror_cover(self, task, key):
+        """
+        Copy the task's plate preview into our bucket. Bambu's cover URLs are
+        short-lived signed links and the site's CSP only allows same-origin
+        images, so the page can't use them directly.
+        """
+        cover = task.get("cover")
+        if not cover:
+            return None
+        if key in self._mirrored:
+            return f"/{key}"
+        try:
+            self.s3.head_object(Bucket=self.bucket, Key=key)
+            self._mirrored.add(key)
+            return f"/{key}"
+        except Exception:
+            pass  # not mirrored yet
+        try:
+            resp = self.session.get(cover, timeout=20)
+            resp.raise_for_status()
+            content_type = resp.headers.get("Content-Type", "image/png").split(";")[0]
+            if not content_type.startswith("image/"):
+                return None
+            self.s3.put_object(Bucket=self.bucket, Key=key, Body=resp.content, ContentType=content_type)
+            self._mirrored.add(key)
+            return f"/{key}"
+        except Exception as e:
+            log.warning("Could not mirror cover image for task %s: %s", task.get("id"), e)
+            return None
+
+    def history(self, tasks):
+        entries = []
+        for task in tasks:
+            entry = cloud_task_to_entry(task)
+            if not entry:
+                continue
+            entry["thumbnailUrl"] = self.mirror_cover(task, f"history/{entry['id']}.png")
+            entries.append(entry)
+        return entries[:MAX_HISTORY]
+
+    def running_task(self, tasks, raw):
+        """The cloud task for the job the printer is running now, if we can tell."""
+        ids = {str(raw.get("task_id")), str(raw.get("subtask_id"))} - {"None", "0", ""}
+        for task in tasks:
+            if str(task.get("id")) in ids:
+                return task
+        name = raw.get("subtask_name")
+        for task in tasks:
+            if task.get("status") not in CLOUD_TASK_STATUS and name and task.get("title") == name:
+                return task
+        return None
 
 
 class BambuMQTTPublisher:
@@ -351,7 +557,12 @@ class BambuMQTTPublisher:
             if youtube_video_id else None
         )
         self.state = PrinterState(stream_url=stream_url)
-        self._last_model_fetch_file = None
+        self._last_model_fetch_job = None
+        self.cloud_tasks = (
+            BambuCloudTasks(cloud_password, serial, self.s3, bucket) if mode == "cloud" else None
+        )
+        self._last_cloud_sync = 0
+        self._cloud_sync_requested = True
         self._stop = False
 
         self.client = mqtt.Client(client_id=f"chrispivonka-3dprinting-{uuid.uuid4().hex[:8]}")
@@ -398,9 +609,12 @@ class BambuMQTTPublisher:
             report = json.loads(msg.payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return
+        previous_job = self.state.job_key
         completed_entry = self.state.apply(report)
         if completed_entry:
             self._archive_completed_model(completed_entry)
+        if completed_entry or self.state.job_key != previous_job:
+            self._cloud_sync_requested = True  # pick up the new/finished task promptly
 
     def _archive_completed_model(self, entry):
         """
@@ -430,17 +644,45 @@ class BambuMQTTPublisher:
         if self.mode != "lan":
             return  # FTPS model fetch needs local network access; not available via cloud
         gcode_file = self.state.raw.get("gcode_file")
-        if not gcode_file or gcode_file == self._last_model_fetch_file:
+        job_key = self.state.job_key
+        if not gcode_file or job_key == self._last_model_fetch_job:
             return
-        self._last_model_fetch_file = gcode_file
-        result = try_fetch_current_3mf(self.host, self.access_code, gcode_file)
+        self._last_model_fetch_job = job_key
+        result = try_fetch_current_3mf(
+            self.host, self.access_code, gcode_file, self.state.raw.get("subtask_name"),
+        )
         if not result:
             return
         data, filename = result
-        key = "live/current.3mf"
+        # One key per job: CloudFront caches by path, so reusing a single
+        # live/current.3mf would keep serving the previous job's model.
+        job_hash = hashlib.sha1(repr(job_key).encode("utf-8")).hexdigest()[:12]
+        key = f"live/{job_hash}.3mf"
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType="model/3mf")
         self.state.raw["_live_model_key"] = key
         log.info("Uploaded live model %s -> s3://%s/%s", filename, self.bucket, key)
+
+    def _maybe_sync_cloud_history(self):
+        if not self.cloud_tasks:
+            return
+        now = time.time()
+        if not self._cloud_sync_requested and now - self._last_cloud_sync < CLOUD_TASK_SYNC_INTERVAL_SEC:
+            return
+        self._cloud_sync_requested = False
+        self._last_cloud_sync = now
+        tasks = self.cloud_tasks.fetch_tasks()
+        if tasks is None:
+            return
+        history = self.cloud_tasks.history(tasks)
+        if history:
+            # The cloud list is authoritative: it has real names, filament and
+            # previews, and covers prints made before this publisher started.
+            self.state.history = history
+            self.state._save_history()
+        running = self.cloud_tasks.running_task(tasks, self.state.raw)
+        if running and self.state.raw.get("gcode_state") in ("RUNNING", "PREPARE", "PAUSE"):
+            self.state.thumbnail_url = self.cloud_tasks.mirror_cover(running, f"live/task-{running['id']}.png")
+        log.info("Synced %d prints from the Bambu cloud task list", len(history))
 
     def _publish_status(self):
         payload = self.state.to_payload()
@@ -472,6 +714,7 @@ class BambuMQTTPublisher:
                     self._request_pushall()
                     last_pushall = now
                 self._maybe_fetch_model()
+                self._maybe_sync_cloud_history()
                 self._publish_status()
                 time.sleep(PUBLISH_INTERVAL_SEC)
         finally:
