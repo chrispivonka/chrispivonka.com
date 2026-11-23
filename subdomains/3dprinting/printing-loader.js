@@ -3,14 +3,31 @@ import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import * as fflate from "fflate";
 import PRINTING_CONFIG from "./printing-config.js";
+import {
+  escapeHtml, jobTitle, prettyJobName, modelFormatFromUrl, modelFormatFromBytes,
+  slicedPlateNumber, parse3mfTransform, formatUptime, isTelemetryStale, formatCompletedAt
+} from "./printing-format.js";
+
+const POLL_INTERVAL_MS = 5000;
+const PRODUCTION_NS = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
+const MODEL_COLORS = [0x58a6ff, 0x3fb950, 0xbc8cff, 0xd29922, 0xf778ba, 0x39c5cf];
 
 let pollTimer = null;
-let currentScene = null;
-let currentRenderer = null;
-let currentControls = null;
+let latestTelemetry = null;
+
+// What the viewport is showing.
+//  - viewKey: identity of the current live view, so a poll only re-renders
+//    the viewport when the live job/model actually changed.
+//  - selection: set when the visitor picked a history row or loaded a file;
+//    polling then leaves the viewport alone until they return to live.
+let viewKey = null;
+let selection = null;
+let loadGeneration = 0;
+let historySignature = null;
+
+// three.js scene state + listeners to tear down on the next render.
 let animFrameId = null;
-let currentViewMode = null; // 'stream' | 'cad'
-let userModeOverride = false;
+let sceneDisposers = [];
 
 async function fetchPrinterTelemetry() {
   try {
@@ -26,336 +43,546 @@ async function fetchPrinterTelemetry() {
   }
 }
 
-function cleanupThreeScene() {
+function cleanupViewport() {
   if (animFrameId) {
     cancelAnimationFrame(animFrameId);
     animFrameId = null;
   }
-  if (currentControls) {
-    currentControls.dispose();
-    currentControls = null;
-  }
-  if (currentRenderer) {
-    currentRenderer.dispose();
-    currentRenderer = null;
-  }
-  currentScene = null;
+  sceneDisposers.forEach(dispose => {
+    try {
+      dispose();
+    } catch (err) {
+      console.warn("Viewport cleanup failed:", err);
+    }
+  });
+  sceneDisposers = [];
 }
 
-function parse3MFToGroup(arrayBuffer) {
-  const unzipped = fflate.unzipSync(new Uint8Array(arrayBuffer));
-  const group = new THREE.Group();
+// ─────────────────────────────────────────────
+// 3MF parsing (Bambu Studio / OrcaSlicer project + sliced files)
+// ─────────────────────────────────────────────
+
+function normalizeZipPath(path) {
+  return String(path || "").replace(/^\/+/, "");
+}
+
+function findRootModelPath(files) {
+  const rels = files["_rels/.rels"];
+  if (rels) {
+    const doc = new DOMParser().parseFromString(new TextDecoder().decode(rels), "text/xml");
+    for (const rel of doc.getElementsByTagName("Relationship")) {
+      const target = normalizeZipPath(rel.getAttribute("Target"));
+      if (target.toLowerCase().endsWith(".model") && files[target]) {
+        return target;
+      }
+    }
+  }
+  if (files["3D/3dmodel.model"]) {
+    return "3D/3dmodel.model";
+  }
+  return Object.keys(files).find(f => f.toLowerCase().endsWith(".model")) || null;
+}
+
+/** Object ids that belong to the sliced plate, from Bambu's Metadata/model_settings.config. */
+function plateObjectIds(files) {
+  const plate = slicedPlateNumber(Object.keys(files));
+  const config = files["Metadata/model_settings.config"];
+  if (!plate || !config) {
+    return null;
+  }
+  const doc = new DOMParser().parseFromString(new TextDecoder().decode(config), "text/xml");
+  for (const plateEl of doc.getElementsByTagName("plate")) {
+    const meta = [...plateEl.children].filter(c => c.tagName === "metadata");
+    const id = meta.find(m => m.getAttribute("key") === "plater_id");
+    if (!id || id.getAttribute("value") !== plate) {
+      continue;
+    }
+    const ids = new Set();
+    for (const inst of plateEl.getElementsByTagName("model_instance")) {
+      for (const m of inst.getElementsByTagName("metadata")) {
+        if (m.getAttribute("key") === "object_id") {
+          ids.add(m.getAttribute("value"));
+        }
+      }
+    }
+    return ids.size ? ids : null;
+  }
+  return null;
+}
+
+function meshToGeometry(meshEl) {
+  const vertexEls = meshEl.getElementsByTagName("vertex");
+  const positions = new Float32Array(vertexEls.length * 3);
+  for (let i = 0; i < vertexEls.length; i++) {
+    const v = vertexEls[i];
+    positions[i * 3] = parseFloat(v.getAttribute("x")) || 0;
+    positions[i * 3 + 1] = parseFloat(v.getAttribute("y")) || 0;
+    positions[i * 3 + 2] = parseFloat(v.getAttribute("z")) || 0;
+  }
+  const triangleEls = meshEl.getElementsByTagName("triangle");
+  const indices = new Uint32Array(triangleEls.length * 3);
+  for (let i = 0; i < triangleEls.length; i++) {
+    const t = triangleEls[i];
+    indices[i * 3] = parseInt(t.getAttribute("v1"), 10);
+    indices[i * 3 + 1] = parseInt(t.getAttribute("v2"), 10);
+    indices[i * 3 + 2] = parseInt(t.getAttribute("v3"), 10);
+  }
+  if (positions.length === 0 || indices.length === 0) {
+    return null;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function applyTransform(object3d, attr) {
+  const m = parse3mfTransform(attr);
+  if (m) {
+    new THREE.Matrix4().set(...m).decompose(object3d.position, object3d.quaternion, object3d.scale);
+  }
+}
+
+function makeMaterial(index) {
+  return new THREE.MeshStandardMaterial({
+    color: MODEL_COLORS[index % MODEL_COLORS.length],
+    roughness: 0.35,
+    metalness: 0.3,
+    side: THREE.DoubleSide
+  });
+}
+
+export function parse3MFToGroup(arrayBuffer) {
+  const files = fflate.unzipSync(new Uint8Array(arrayBuffer));
   const parser = new DOMParser();
+  const docs = new Map();
+  const getDoc = (path) => {
+    const key = normalizeZipPath(path);
+    if (!docs.has(key)) {
+      const bytes = files[key];
+      docs.set(key, bytes ? parser.parseFromString(new TextDecoder().decode(bytes), "text/xml") : null);
+    }
+    return docs.get(key);
+  };
+  const findObject = (path, id) => {
+    const doc = getDoc(path);
+    if (!doc) {
+      return null;
+    }
+    return [...doc.getElementsByTagName("object")].find(o => o.getAttribute("id") === id) || null;
+  };
 
-  for (const filename in unzipped) {
-    if (filename.toLowerCase().endsWith(".model")) {
-      const modelXmlText = new TextDecoder().decode(unzipped[filename]);
-      const xmlDoc = parser.parseFromString(modelXmlText, "text/xml");
-      const meshNodes = xmlDoc.getElementsByTagName("mesh");
+  const geometryCache = new Map();
+  let colorIndex = 0;
 
-      for (let m = 0; m < meshNodes.length; m++) {
-        const meshNode = meshNodes[m];
-        const vertices = [];
-        const indices = [];
+  const buildObject = (path, id, depth = 0) => {
+    const objectEl = depth < 8 ? findObject(path, id) : null;
+    if (!objectEl) {
+      return null;
+    }
+    const meshEl = objectEl.getElementsByTagName("mesh")[0];
+    if (meshEl && meshEl.parentNode === objectEl) {
+      const key = `${normalizeZipPath(path)}#${id}`;
+      if (!geometryCache.has(key)) {
+        geometryCache.set(key, meshToGeometry(meshEl));
+      }
+      const geometry = geometryCache.get(key);
+      return geometry ? new THREE.Mesh(geometry, makeMaterial(colorIndex)) : null;
+    }
+    const group = new THREE.Group();
+    for (const comp of objectEl.getElementsByTagName("component")) {
+      const compPath = comp.getAttributeNS(PRODUCTION_NS, "path") || comp.getAttribute("p:path") || path;
+      const child = buildObject(compPath, comp.getAttribute("objectid"), depth + 1);
+      if (child) {
+        applyTransform(child, comp.getAttribute("transform"));
+        group.add(child);
+      }
+    }
+    return group.children.length ? group : null;
+  };
 
-        const vertexNodes = meshNode.getElementsByTagName("vertex");
-        for (let i = 0; i < vertexNodes.length; i++) {
-          const v = vertexNodes[i];
-          vertices.push(
-            parseFloat(v.getAttribute("x") || 0),
-            parseFloat(v.getAttribute("y") || 0),
-            parseFloat(v.getAttribute("z") || 0)
-          );
-        }
+  const rootPath = findRootModelPath(files);
+  const root = new THREE.Group();
+  const rootDoc = rootPath ? getDoc(rootPath) : null;
 
-        const triangleNodes = meshNode.getElementsByTagName("triangle");
-        for (let i = 0; i < triangleNodes.length; i++) {
-          const t = triangleNodes[i];
-          indices.push(
-            parseInt(t.getAttribute("v1"), 10),
-            parseInt(t.getAttribute("v2"), 10),
-            parseInt(t.getAttribute("v3"), 10)
-          );
-        }
+  if (rootDoc) {
+    let items = [...rootDoc.getElementsByTagName("item")];
+    const onPlate = plateObjectIds(files);
+    if (onPlate) {
+      const filtered = items.filter(item => onPlate.has(item.getAttribute("objectid")));
+      if (filtered.length) {
+        items = filtered;
+      }
+    }
+    for (const item of items) {
+      const obj = buildObject(item.getAttribute("p:path") || rootPath, item.getAttribute("objectid"));
+      if (obj) {
+        applyTransform(obj, item.getAttribute("transform"));
+        root.add(obj);
+        colorIndex++;
+      }
+    }
+  }
 
-        if (vertices.length > 0) {
-          const geometry = new THREE.BufferGeometry();
-          geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
-          if (indices.length > 0) {
-            geometry.setIndex(indices);
-          }
-          geometry.computeVertexNormals();
-
-          const mat = new THREE.MeshStandardMaterial({
-            color: 0x58a6ff,
-            roughness: 0.35,
-            metalness: 0.3,
-            wireframe: false
-          });
-
-          const mesh = new THREE.Mesh(geometry, mat);
-          group.add(mesh);
+  // Fallback for files without a usable build section: show every mesh.
+  if (root.children.length === 0) {
+    for (const name of Object.keys(files)) {
+      if (!name.toLowerCase().endsWith(".model")) {
+        continue;
+      }
+      for (const meshEl of getDoc(name).getElementsByTagName("mesh")) {
+        const geometry = meshToGeometry(meshEl);
+        if (geometry) {
+          root.add(new THREE.Mesh(geometry, makeMaterial(colorIndex++)));
         }
       }
     }
   }
 
-  if (group.children.length === 0) {
-    throw new Error("No valid meshes found in 3MF XML model files");
+  if (root.children.length === 0) {
+    throw new Error("This 3MF file has no 3D geometry in it");
   }
-
-  return group;
+  return root;
 }
 
-async function render3DArrayBuffer(container, arrayBuffer, fileName = "Model File") {
-  cleanupThreeScene();
-  if (!container) {
-    return;
-  }
-  currentViewMode = "cad";
+// ─────────────────────────────────────────────
+// Viewport rendering
+// ─────────────────────────────────────────────
 
-  const is3MF = fileName.toLowerCase().endsWith(".3mf");
-
-  container.innerHTML = `
-    <div id="threejs-viewport" style="width:100%; height:100%; position:relative;"></div>
-    <div style="position:absolute; bottom:12px; left:16px; font-family:var(--mono); font-size:0.68rem; color:var(--text); background:rgba(13,17,23,0.85); padding:6px 10px; border-radius:4px; border:1px solid var(--cyan); display:flex; align-items:center; gap:0.6rem; z-index:10; flex-wrap:wrap;">
+function overlayHtml({ title, kind, wireframe = false }) {
+  const backBtn = selection
+    ? "<button type=\"button\" id=\"back-to-live-btn\" class=\"viewer-btn viewer-btn-live\">● Back to live</button>"
+    : "";
+  const wireBtn = wireframe
+    ? "<button type=\"button\" id=\"toggle-wireframe-btn\" class=\"viewer-btn\">Wireframe</button>"
+    : "";
+  return `
+    <div class="viewer-overlay">
       <i class="bi bi-box-seam" style="color:var(--cyan);"></i>
-      <span>Model: <strong>${fileName}</strong> (${is3MF ? "3MF Package" : "STL Mesh"})</span>
-      <button id="toggle-wireframe-btn" style="background:var(--bg-elevated); color:var(--text); border:1px solid var(--border); padding:2px 6px; border-radius:3px; cursor:pointer; font-size:0.65rem;">Toggle Wireframe</button>
-      <label for="stl-file-input" style="background:var(--cyan); color:#000; border:none; padding:2px 8px; border-radius:3px; cursor:pointer; font-weight:600; font-size:0.65rem;">Load STL / 3MF File...</label>
-      ${userModeOverride ? "<button id=\"switch-to-stream-btn\" style=\"background:rgba(63,185,80,0.2); color:var(--green); border:1px solid rgba(63,185,80,0.4); padding:2px 8px; border-radius:3px; cursor:pointer; font-size:0.65rem;\">● Return to Live Stream</button>" : ""}
+      <span><strong>${escapeHtml(title)}</strong>${kind ? ` <span class="viewer-kind">${escapeHtml(kind)}</span>` : ""}</span>
+      ${wireBtn}
+      <label for="stl-file-input" class="viewer-btn viewer-btn-primary">Open STL / 3MF…</label>
+      ${backBtn}
     </div>
   `;
+}
 
-  const returnStreamBtn = document.getElementById("switch-to-stream-btn");
-  if (returnStreamBtn) {
-    returnStreamBtn.addEventListener("click", async () => {
-      userModeOverride = false;
-      const telemetry = await fetchPrinterTelemetry();
-      if (telemetry && (telemetry.streamUrl || telemetry.snapshotUrl)) {
-        renderStreamFeed(container, telemetry);
+function wireOverlay(container) {
+  const back = container.querySelector("#back-to-live-btn");
+  if (back) {
+    back.addEventListener("click", () => {
+      selection = null;
+      viewKey = null;
+      document.querySelectorAll(".history-row").forEach(r => r.classList.remove("active-history-row"));
+      if (latestTelemetry) {
+        showLiveView(container, latestTelemetry);
       }
     });
   }
+}
 
-  const viewport = document.getElementById("threejs-viewport");
-  const width = container.clientWidth;
-  const height = container.clientHeight;
+function renderMessage(container, { title, message, kind = "" }) {
+  cleanupViewport();
+  container.innerHTML = `
+    <div class="viewer-message">
+      <i class="bi bi-box" style="font-size:2rem; color:var(--text-muted);"></i>
+      <p>${escapeHtml(message)}</p>
+    </div>
+    ${overlayHtml({ title, kind })}
+  `;
+  wireOverlay(container);
+}
+
+function renderImage(container, { url, title, kind }) {
+  cleanupViewport();
+  container.innerHTML = `
+    <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#0d1117;">
+      <img src="${escapeHtml(url)}" alt="${escapeHtml(`Plate preview of ${title}`)}" style="max-width:100%; max-height:100%; object-fit:contain;" />
+    </div>
+    ${overlayHtml({ title, kind })}
+  `;
+  const img = container.querySelector("img");
+  img.addEventListener("error", () => {
+    renderMessage(container, { title, message: "The preview image for this print couldn't be loaded." });
+  });
+  wireOverlay(container);
+}
+
+function renderScene(container, modelGroup, { title, kind }) {
+  cleanupViewport();
+  container.innerHTML = `
+    <div class="threejs-viewport" style="width:100%; height:100%; position:relative;"></div>
+    ${overlayHtml({ title, kind, wireframe: true })}
+  `;
+  wireOverlay(container);
+
+  const viewport = container.querySelector(".threejs-viewport");
+  const width = container.clientWidth || 800;
+  const height = container.clientHeight || 450;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x161b22);
-  currentScene = scene;
 
-  const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-  camera.position.set(0, 0, 100);
-
+  const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 10000);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(width, height);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   viewport.appendChild(renderer.domElement);
-  currentRenderer = renderer;
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  currentControls = controls;
 
-  // Click & Drag repositioning pauses auto-rotation (Zooming via wheel does NOT pause)
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
+  dirLight1.position.set(100, 200, 100);
+  scene.add(dirLight1);
+  const dirLight2 = new THREE.DirectionalLight(0xbc8cff, 0.6);
+  dirLight2.position.set(-100, -100, -50);
+  scene.add(dirLight2);
+
+  // Printer files are Z-up; three.js is Y-up. Rotate, then center on origin
+  // inside a pivot so auto-rotation spins the model around its own middle.
+  modelGroup.rotation.x = -Math.PI / 2;
+  const pivot = new THREE.Group();
+  pivot.add(modelGroup);
+  scene.add(pivot);
+
+  const box = new THREE.Box3().setFromObject(pivot);
+  if (!box.isEmpty()) {
+    modelGroup.position.sub(box.getCenter(new THREE.Vector3()));
+  }
+  const size = box.isEmpty() ? new THREE.Vector3(40, 40, 40) : box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 40;
+  camera.position.set(0, maxDim * 0.9, maxDim * 1.8);
+  camera.near = maxDim / 100;
+  camera.far = maxDim * 100;
+  camera.updateProjectionMatrix();
+  camera.lookAt(0, 0, 0);
+
+  // Dragging pauses auto-rotation for a few seconds; zooming doesn't.
   let autoRotate = true;
   let inactivityTimer = null;
-  const INACTIVITY_DELAY_MS = 5000;
-
   const onDragStart = () => {
     autoRotate = false;
-    if (inactivityTimer) {
-      clearTimeout(inactivityTimer);
-      inactivityTimer = null;
-    }
+    clearTimeout(inactivityTimer);
+    inactivityTimer = null;
   };
-
   const onDragEnd = () => {
     if (!autoRotate && !inactivityTimer) {
       inactivityTimer = setTimeout(() => {
         autoRotate = true;
         inactivityTimer = null;
-      }, INACTIVITY_DELAY_MS);
+      }, 5000);
     }
   };
-
-  renderer.domElement.addEventListener("mousedown", onDragStart);
-  renderer.domElement.addEventListener("touchstart", onDragStart, { passive: true });
-  window.addEventListener("mouseup", onDragEnd);
-  window.addEventListener("touchend", onDragEnd, { passive: true });
-
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-  scene.add(ambientLight);
-
-  const dirLight1 = new THREE.DirectionalLight(0x58a6ff, 1.2);
-  dirLight1.position.set(100, 100, 100);
-  scene.add(dirLight1);
-
-  const dirLight2 = new THREE.DirectionalLight(0xbc8cff, 0.8);
-  dirLight2.position.set(-100, -100, -50);
-  scene.add(dirLight2);
-
-  let modelGroup = new THREE.Group();
-  const materialsList = [];
-
-  if (is3MF) {
-    try {
-      modelGroup = parse3MFToGroup(arrayBuffer);
-      modelGroup.traverse((child) => {
-        if (child.isMesh && child.material) {
-          materialsList.push(child.material);
-        }
-      });
-    } catch (parseErr) {
-      console.warn("Direct 3MF XML parse failed, attempting ThreeMFLoader fallback:", parseErr);
-      try {
-        const { ThreeMFLoader } = await import("three/addons/loaders/3MFLoader.js");
-        const loader = new ThreeMFLoader();
-        modelGroup = loader.parse(arrayBuffer);
-        modelGroup.traverse((child) => {
-          if (child.isMesh && child.material) {
-            materialsList.push(child.material);
-          }
-        });
-      } catch (err) {
-        console.warn("All 3MF loaders failed:", err);
-      }
+  const onResize = () => {
+    if (!container.clientWidth) {
+      return;
     }
-  } else {
-    // STL Loader
-    const loader = new STLLoader();
-    const geometry = loader.parse(arrayBuffer);
-    geometry.computeVertexNormals();
-    geometry.center();
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+  };
+  renderer.domElement.addEventListener("pointerdown", onDragStart);
+  window.addEventListener("pointerup", onDragEnd);
+  window.addEventListener("resize", onResize);
 
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x58a6ff,
-      roughness: 0.3,
-      metalness: 0.4,
-      wireframe: false
+  const materials = [];
+  modelGroup.traverse(child => {
+    if (child.isMesh && child.material) {
+      materials.push(child.material);
+    }
+  });
+  const toggleBtn = container.querySelector("#toggle-wireframe-btn");
+  let isWire = false;
+  toggleBtn.addEventListener("click", () => {
+    isWire = !isWire;
+    materials.forEach(m => {
+      m.wireframe = isWire;
     });
-    materialsList.push(mat);
+    toggleBtn.textContent = isWire ? "Solid" : "Wireframe";
+  });
 
-    const mesh = new THREE.Mesh(geometry, mat);
-    modelGroup.add(mesh);
-  }
-
-  scene.add(modelGroup);
-
-  // Center & Auto-fit camera position to model bounds
-  const box = new THREE.Box3().setFromObject(modelGroup);
-  const center = box.getCenter(new THREE.Vector3());
-  modelGroup.position.sub(center);
-
-  const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z) || 40;
-  camera.position.set(0, maxDim * 1.2, maxDim * 2.0);
-  camera.lookAt(0, 0, 0);
-
-  // Wireframe toggle
-  const toggleBtn = document.getElementById("toggle-wireframe-btn");
-  if (toggleBtn) {
-    let isWire = false;
-    toggleBtn.addEventListener("click", () => {
-      isWire = !isWire;
-      materialsList.forEach((m) => {
-        if (m) {
-          m.wireframe = isWire;
-        }
-      });
-      toggleBtn.textContent = isWire ? "Solid View" : "Toggle Wireframe";
+  sceneDisposers.push(() => {
+    clearTimeout(inactivityTimer);
+    window.removeEventListener("pointerup", onDragEnd);
+    window.removeEventListener("resize", onResize);
+    controls.dispose();
+    modelGroup.traverse(child => {
+      if (child.isMesh) {
+        child.geometry.dispose();
+        child.material.dispose();
+      }
     });
-  }
+    renderer.dispose();
+  });
 
-  // Animation Loop
-  function animate() {
+  const animate = () => {
     animFrameId = requestAnimationFrame(animate);
-    if (autoRotate && modelGroup) {
-      modelGroup.rotation.y += 0.003;
+    if (autoRotate) {
+      pivot.rotation.y += 0.003;
     }
     controls.update();
     renderer.render(scene, camera);
-  }
-  animate();
-
-  // Window Resize
-  const onResize = () => {
-    if (!container || container.clientWidth === 0) {
-      return;
-    }
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
   };
-  window.addEventListener("resize", onResize);
+  animate();
 }
 
-async function loadSampleModel(container, modelUrl = "./output.stl", fileName = "output.stl") {
+function buildModelGroup(arrayBuffer, formatHint) {
+  // Trust the bytes over the hint: a 3MF is a ZIP, anything else is STL.
+  const format = modelFormatFromBytes(arrayBuffer) === "3mf" ? "3mf" : (formatHint === "3mf" ? "3mf" : "stl");
+  if (format === "3mf") {
+    return { group: parse3MFToGroup(arrayBuffer), kind: "3MF" };
+  }
+  const geometry = new STLLoader().parse(arrayBuffer);
+  if (!geometry.attributes.position || geometry.attributes.position.count === 0) {
+    throw new Error("This STL file has no triangles in it");
+  }
+  geometry.computeVertexNormals();
+  const group = new THREE.Group();
+  group.add(new THREE.Mesh(geometry, makeMaterial(0)));
+  return { group, kind: "STL" };
+}
+
+function renderArrayBuffer(container, arrayBuffer, { title, formatHint }) {
   try {
-    const res = await fetch(modelUrl);
+    const { group, kind } = buildModelGroup(arrayBuffer, formatHint);
+    renderScene(container, group, { title, kind });
+  } catch (err) {
+    console.warn("Could not render model:", err);
+    renderMessage(container, { title, message: `This model couldn't be displayed: ${err.message}` });
+  }
+}
+
+async function renderModelUrl(container, { url, title, thumbnailUrl }) {
+  const generation = ++loadGeneration;
+  renderMessage(container, { title, message: "Loading 3D model…" });
+  try {
+    const res = await fetch(url);
     if (!res.ok) {
-      throw new Error("Failed to fetch model");
+      throw new Error(`the file returned HTTP ${res.status}`);
     }
     const buffer = await res.arrayBuffer();
-    await render3DArrayBuffer(container, buffer, fileName);
+    if (generation !== loadGeneration) {
+      return; // a newer load started while this one was downloading
+    }
+    renderArrayBuffer(container, buffer, { title, formatHint: modelFormatFromUrl(url) });
   } catch (err) {
-    console.warn("Could not load sample model:", err);
+    if (generation !== loadGeneration) {
+      return;
+    }
+    console.warn("Could not load model:", err);
+    if (thumbnailUrl) {
+      renderImage(container, { url: thumbnailUrl, title, kind: "plate preview" });
+    } else {
+      renderMessage(container, { title, message: `The saved model for this print couldn't be loaded (${err.message}).` });
+    }
   }
 }
 
-function setupDragAndDrop(container) {
+/** Show a history entry or the live job: real model > plate preview > honest message. */
+function showEntry(container, entry, { liveTitle } = {}) {
+  const title = liveTitle || jobTitle(entry);
+  if (entry && entry.modelUrl) {
+    renderModelUrl(container, { url: entry.modelUrl, title, thumbnailUrl: entry.thumbnailUrl });
+  } else if (entry && entry.thumbnailUrl) {
+    ++loadGeneration;
+    renderImage(container, { url: entry.thumbnailUrl, title, kind: "plate preview" });
+  } else {
+    ++loadGeneration;
+    renderMessage(container, {
+      title,
+      message: "No 3D model or preview was saved for this print."
+    });
+  }
+}
+
+function renderStreamFeed(container, telemetry) {
+  cleanupViewport();
+  ++loadGeneration;
+  const isIframe = Boolean(telemetry.streamUrl);
+  const badgeText = isIframe ? "● LIVE STREAM" : "● LIVE SNAPSHOT";
+  container.innerHTML = `
+    <div style="width:100%; height:100%; position:relative; background:#000;">
+      ${isIframe
+    ? `<iframe src="${escapeHtml(telemetry.streamUrl)}" title="Live printer camera" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`
+    : `<img src="${escapeHtml(telemetry.snapshotUrl)}" alt="Live printer camera snapshot" style="width:100%; height:100%; object-fit:contain;" />`}
+      <div class="viewer-stream-badge">
+        <span>${badgeText}</span>
+        <button type="button" id="switch-to-cad-btn" class="viewer-btn">View model</button>
+      </div>
+    </div>
+  `;
+  container.querySelector("#switch-to-cad-btn").addEventListener("click", () => {
+    selection = { source: "live-model" };
+    showEntry(container, telemetry, { liveTitle: jobTitle(telemetry) });
+  });
+}
+
+function liveViewKey(telemetry) {
+  if (!telemetry) {
+    return "none";
+  }
+  const isPrinting = telemetry.status === "PRINTING";
+  const hasStream = Boolean(telemetry.streamUrl || telemetry.snapshotUrl);
+  if (isPrinting && hasStream) {
+    return `stream|${telemetry.streamUrl || telemetry.snapshotUrl}`;
+  }
+  const entry = liveEntry(telemetry);
+  return `entry|${jobTitle(entry)}|${entry.modelUrl || ""}|${entry.thumbnailUrl || ""}`;
+}
+
+/** What to show when nobody picked anything: the current job, else the most recent print. */
+function liveEntry(telemetry) {
+  if (telemetry.status === "PRINTING" || telemetry.modelUrl || telemetry.thumbnailUrl) {
+    return { ...telemetry, title: telemetry.title || telemetry.fileName };
+  }
+  const last = (telemetry.printHistory || [])[0];
+  return last || telemetry;
+}
+
+function showLiveView(container, telemetry) {
   if (!container) {
     return;
   }
-
-  container.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    container.style.outline = "2px dashed var(--cyan)";
-  });
-
-  container.addEventListener("dragleave", () => {
-    container.style.outline = "none";
-  });
-
-  container.addEventListener("drop", (e) => {
-    e.preventDefault();
-    container.style.outline = "none";
-
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      const ext = file.name.toLowerCase();
-      if (ext.endsWith(".stl") || ext.endsWith(".3mf")) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          render3DArrayBuffer(container, event.target.result, file.name);
-        };
-        reader.readAsArrayBuffer(file);
-      }
-    }
-  });
+  const key = liveViewKey(telemetry);
+  if (key === viewKey) {
+    return;
+  }
+  viewKey = key;
+  if (!telemetry) {
+    ++loadGeneration;
+    renderMessage(container, {
+      title: "Printer offline",
+      message: "Live printer telemetry isn't available right now. You can still open an STL or 3MF file to view it."
+    });
+    return;
+  }
+  if (key.startsWith("stream|")) {
+    renderStreamFeed(container, telemetry);
+    return;
+  }
+  showEntry(container, liveEntry(telemetry));
 }
+
+// ─────────────────────────────────────────────
+// Telemetry panels
+// ─────────────────────────────────────────────
 
 function renderLiveJobCard(telemetry) {
   const container = document.getElementById("live-job-container");
   if (!container) {
     return;
   }
-
   if (!telemetry || telemetry.status !== "PRINTING") {
     container.style.display = "none";
     return;
   }
 
   container.style.display = "";
-  const pct = telemetry.progressPercent || 0;
-  const fileName = telemetry.fileName || "Active Print Job";
+  const pct = Number(telemetry.progressPercent) || 0;
   const layer = telemetry.currentLayer && telemetry.totalLayers ? `Layer ${telemetry.currentLayer} / ${telemetry.totalLayers}` : "";
   const timeRem = telemetry.timeRemaining ? `Remaining: ${telemetry.timeRemaining}` : "";
   const temps = telemetry.temps || {};
@@ -363,17 +590,17 @@ function renderLiveJobCard(telemetry) {
   container.innerHTML = `
     <div class="live-job-card">
       <div class="job-header">
-        <span class="job-title"><i class="bi bi-play-circle-fill" style="color: var(--green);"></i> ${fileName}</span>
+        <span class="job-title"><i class="bi bi-play-circle-fill" style="color: var(--green);"></i> ${escapeHtml(jobTitle({ title: telemetry.title || telemetry.fileName }))}</span>
         <span class="job-percent">${pct}%</span>
       </div>
       <div class="progress-track">
         <div class="progress-fill" style="width: ${pct}%;"></div>
       </div>
       <div class="job-stats-row">
-        <span><i class="bi bi-layers"></i> ${layer}</span>
-        <span><i class="bi bi-clock-history"></i> ${timeRem}</span>
-        <span><i class="bi bi-thermometer-half"></i> Nozzle: ${temps.nozzle || "215°C"}</span>
-        <span><i class="bi bi-grid-3x3"></i> Bed: ${temps.bed || "60°C"}</span>
+        <span><i class="bi bi-layers"></i> ${escapeHtml(layer)}</span>
+        <span><i class="bi bi-clock-history"></i> ${escapeHtml(timeRem)}</span>
+        <span><i class="bi bi-thermometer-half"></i> Nozzle: ${escapeHtml(temps.nozzle || "—")}</span>
+        <span><i class="bi bi-grid-3x3"></i> Bed: ${escapeHtml(temps.bed || "—")}</span>
       </div>
     </div>
   `;
@@ -385,21 +612,24 @@ function renderSpecs(telemetry) {
     return;
   }
 
-  const temps = telemetry && telemetry.temps ? telemetry.temps : {};
-  const activeStatus = telemetry && telemetry.status ? telemetry.status : PRINTING_CONFIG.status;
-  const cadModelName = telemetry && telemetry.modelName ? telemetry.modelName : "output.stl";
+  const temps = (telemetry && telemetry.temps) || {};
+  const status = telemetry ? telemetry.status : "OFFLINE";
+  const isPrinting = status === "PRINTING";
+  const statusLabel = { PRINTING: "PRINTING LIVE", PAUSED: "PAUSED", IDLE: "IDLE" }[status] || "OFFLINE";
+  const current = telemetry && isPrinting ? jobTitle({ title: telemetry.title || telemetry.fileName }) : "—";
+  const withTarget = (val, target) => (val ? `${val}${target ? ` (target ${target})` : ""}` : "—");
 
   const specsList = [
-    { label: "status", value: activeStatus === "PRINTING" ? "PRINTING LIVE" : "STANDBY" },
-    { label: "active model", value: cadModelName },
-    { label: "nozzle temp", value: temps.nozzle ? `${temps.nozzle} (target ${temps.nozzleTarget || "215°C"})` : "215°C" },
-    { label: "bed temp", value: temps.bed ? `${temps.bed} (target ${temps.bedTarget || "60°C"})` : "60°C" }
+    { label: "status", value: statusLabel },
+    { label: "current job", value: current },
+    { label: "nozzle temp", value: withTarget(temps.nozzle, temps.nozzleTarget) },
+    { label: "bed temp", value: withTarget(temps.bed, temps.bedTarget) }
   ];
 
   specsContainer.innerHTML = specsList.map(spec => `
     <div class="spec-card">
       <span class="spec-label">${spec.label}</span>
-      <span class="spec-val" style="${spec.label === "status" && activeStatus === "PRINTING" ? "color: var(--green);" : ""}">${spec.value}</span>
+      <span class="spec-val" style="${spec.label === "status" && isPrinting ? "color: var(--green);" : ""}">${escapeHtml(spec.value)}</span>
     </div>
   `).join("");
 }
@@ -410,18 +640,29 @@ function renderAmsSlots(telemetry) {
     return;
   }
 
-  const amsData = (telemetry && telemetry.ams) || PRINTING_CONFIG.bambuStats.amsSlots;
+  const amsData = (telemetry && telemetry.ams && telemetry.ams.length) ? telemetry.ams : PRINTING_CONFIG.bambuStats.amsSlots;
 
   amsContainer.innerHTML = amsData.map(slot => {
     const isActive = slot.active === true;
+    const color = /^#[0-9a-f]{3,8}$/i.test(slot.color || "") ? slot.color : "#888888";
     return `
       <div class="ams-slot ${isActive ? "active-slot" : ""}">
-        <span class="ams-color-dot" style="background: ${slot.color}; border: 1px solid var(--border-bright);"></span>
-        <span class="ams-slot-num">Slot ${slot.slot}:</span>
-        <span class="ams-mat-name">${slot.material}${isActive ? " (ACTIVE)" : ""}</span>
+        <span class="ams-color-dot" style="background: ${color}; border: 1px solid var(--border-bright);"></span>
+        <span class="ams-slot-num">Slot ${escapeHtml(slot.slot)}:</span>
+        <span class="ams-mat-name">${escapeHtml(slot.material)}${isActive ? " (ACTIVE)" : ""}</span>
       </div>
     `;
   }).join("");
+}
+
+function historyActionLabel(item) {
+  if (item.modelUrl) {
+    return "<i class=\"bi bi-box-seam\"></i> View 3D model";
+  }
+  if (item.thumbnailUrl) {
+    return "<i class=\"bi bi-image\"></i> View preview";
+  }
+  return null;
 }
 
 function renderPrintHistory(telemetry) {
@@ -430,92 +671,77 @@ function renderPrintHistory(telemetry) {
     return;
   }
 
-  const history = (telemetry && telemetry.printHistory) || [
-    { id: "job-112", name: "ESP32_Environmental_Sensor_Housing.gcode", modelName: "output.stl", modelUrl: "./output.stl", material: "PETG Charcoal", printTime: "1h 26m", filamentWeight: "38.4g", completedAt: "2026-07-21 18:40", status: "COMPLETED" },
-    { id: "job-111", name: "RPi4_DIN_Rail_Mount_Bracket.gcode", modelName: "sample-box.stl", modelUrl: "./sample-box.stl", material: "PLA+ White", printTime: "48m", filamentWeight: "19.2g", completedAt: "2026-07-20 14:15", status: "COMPLETED" },
-    { id: "job-110", name: "MagicMirror_Corner_Bezel_TL.gcode", modelName: "output.stl", modelUrl: "./output.stl", material: "ABS Black", printTime: "2h 12m", filamentWeight: "51.8g", completedAt: "2026-07-19 09:30", status: "COMPLETED" }
-  ];
+  const history = (telemetry && Array.isArray(telemetry.printHistory)) ? telemetry.printHistory : [];
+  const signature = JSON.stringify(history);
+  if (signature === historySignature) {
+    return; // unchanged since the last poll; keep the selected row highlighted
+  }
+  historySignature = signature;
 
-  historyContainer.innerHTML = history.map(item => `
-    <tr class="history-row" data-model-url="${item.modelUrl || "./output.stl"}" data-model-name="${item.modelName || item.name}">
-      <td class="h-name"><i class="bi bi-file-earmark-code" style="color: var(--cyan);"></i> ${item.name}</td>
-      <td class="h-mat">${item.material}</td>
-      <td class="h-time">${item.printTime}</td>
-      <td class="h-weight">${item.filamentWeight || "N/A"}</td>
-      <td class="h-date">${item.completedAt}</td>
-      <td class="h-status">
-        <button class="view-model-btn" style="background: var(--bg-elevated); color: var(--cyan); border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px; font-family: var(--mono); font-size: 0.68rem; cursor: pointer;">
-          <i class="bi bi-box-seam"></i> View 3D Model
-        </button>
-      </td>
-    </tr>
-  `).join("");
-
-  const rows = historyContainer.querySelectorAll(".history-row");
-  rows.forEach(row => {
-    row.addEventListener("click", async () => {
-      rows.forEach(r => r.classList.remove("active-history-row"));
-      row.classList.add("active-history-row");
-
-      const modelUrl = row.getAttribute("data-model-url");
-      const modelName = row.getAttribute("data-model-name");
-      const viewportContainer = document.getElementById("printing-container");
-
-      if (viewportContainer && modelUrl) {
-        viewportContainer.scrollIntoView({ behavior: "smooth", block: "center" });
-        await loadSampleModel(viewportContainer, modelUrl, modelName);
-      }
-    });
-  });
-}
-
-function setupFileInputHandler(container) {
-  const fileInput = document.getElementById("stl-file-input");
-  if (!fileInput) {
+  if (history.length === 0) {
+    historyContainer.innerHTML = "<tr><td colspan=\"6\" class=\"h-empty\">No prints recorded yet.</td></tr>";
     return;
   }
 
-  fileInput.addEventListener("change", (e) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        render3DArrayBuffer(container, evt.target.result, file.name);
-      };
-      reader.readAsArrayBuffer(file);
-    }
+  historyContainer.innerHTML = history.map((item, index) => {
+    const action = historyActionLabel(item);
+    const failed = item.status && item.status !== "COMPLETED";
+    const rawName = item.fileName || item.name || "";
+    const title = jobTitle(item);
+    const tooltip = rawName && prettyJobName(rawName) !== rawName ? ` title="${escapeHtml(rawName)}"` : "";
+    const isActive = selection && selection.source === "history" && selection.index === index;
+    return `
+      <tr class="history-row${action ? "" : " history-row-disabled"}${isActive ? " active-history-row" : ""}" data-index="${index}">
+        <td class="h-name"${tooltip}>
+          ${escapeHtml(title)}
+          ${failed ? `<span class="h-badge h-badge-failed">${escapeHtml(item.status === "FAILED" ? "failed" : String(item.status).toLowerCase())}</span>` : ""}
+        </td>
+        <td class="h-mat">${escapeHtml(item.material && item.material !== "Unknown" ? item.material : "—")}</td>
+        <td class="h-time">${escapeHtml(item.printTime || "—")}</td>
+        <td class="h-weight">${escapeHtml(item.filamentWeight || "—")}</td>
+        <td class="h-date">${escapeHtml(formatCompletedAt(item.completedAt))}</td>
+        <td class="h-status">
+          ${action
+    ? `<button type="button" class="view-model-btn">${action}</button>`
+    : "<span class=\"h-none\">No model saved</span>"}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  historyContainer.querySelectorAll(".history-row:not(.history-row-disabled)").forEach(row => {
+    row.addEventListener("click", () => {
+      const index = Number(row.getAttribute("data-index"));
+      const entry = history[index];
+      historyContainer.querySelectorAll(".history-row").forEach(r => r.classList.remove("active-history-row"));
+      row.classList.add("active-history-row");
+      selection = { source: "history", index };
+      const viewportContainer = document.getElementById("printing-container");
+      viewportContainer.scrollIntoView({ behavior: "smooth", block: "center" });
+      showEntry(viewportContainer, entry);
+    });
   });
 }
 
-function renderStreamFeed(container, telemetry) {
-  cleanupThreeScene();
-  currentViewMode = "stream";
+function renderStatusBar(telemetry) {
+  const upEl = document.getElementById("uptime-counter");
+  const centerEl = document.getElementById("printer-status-banner");
+  const stale = !telemetry || isTelemetryStale(telemetry.updatedAt);
 
-  const isIframe = Boolean(telemetry && telemetry.streamUrl);
-  const badgeText = isIframe ? "● LIVE CONTAINER STREAM" : "● LIVE SNAPSHOT";
-
-  container.innerHTML = `
-    <div style="width:100%; height:100%; position:relative; background:#000;">
-      ${isIframe
-    ? `<iframe src="${telemetry.streamUrl}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%;"></iframe>`
-    : `<img src="${telemetry.snapshotUrl}" alt="Live Printer Camera Snapshot" style="width:100%; height:100%; object-fit:contain;" />`
-}
-      <div style="position:absolute; top:12px; right:16px; font-family:var(--mono); font-size:0.68rem; color:var(--green); background:rgba(10,14,23,0.85); border:1px solid rgba(63,185,80,0.4); padding:6px 12px; border-radius:4px; display:flex; align-items:center; gap:0.6rem; z-index:10;">
-        <span>${badgeText}</span>
-        <button id="switch-to-cad-btn" style="background:var(--bg-elevated); color:var(--cyan); border:1px solid var(--border); padding:2px 8px; border-radius:3px; cursor:pointer; font-size:0.65rem;">View 3D CAD Model</button>
-      </div>
-    </div>
-  `;
-
-  const switchBtn = document.getElementById("switch-to-cad-btn");
-  if (switchBtn) {
-    switchBtn.addEventListener("click", async () => {
-      userModeOverride = true;
-      const modelUrl = (telemetry && telemetry.modelUrl) ? telemetry.modelUrl : "./output.stl";
-      const modelName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
-      await loadSampleModel(container, modelUrl, modelName);
-    });
+  if (upEl) {
+    const since = telemetry && Date.parse(telemetry.publisherStartedAt || "");
+    if (stale) {
+      upEl.textContent = "telemetry offline";
+    } else if (since && !Number.isNaN(since)) {
+      upEl.textContent = `telemetry up ${formatUptime(Date.now() - since)}`;
+    } else {
+      upEl.textContent = "telemetry online";
+    }
+  }
+  if (centerEl) {
+    const label = stale ? "OFFLINE" : ({ PRINTING: "PRINTING", PAUSED: "PAUSED", IDLE: "IDLE" }[telemetry.status] || "OFFLINE");
+    centerEl.textContent = `● PRINTER ${label}`;
+    centerEl.style.color = label === "OFFLINE" ? "var(--text-muted)" : (label === "PAUSED" ? "var(--yellow)" : "var(--green)");
   }
 }
 
@@ -524,106 +750,102 @@ async function updateTelemetryUI() {
   const pollBadge = document.getElementById("live-poll-badge");
 
   const telemetry = await fetchPrinterTelemetry();
+  latestTelemetry = telemetry;
 
   if (pollBadge) {
     const nowStr = new Date().toLocaleTimeString("en-US", { hour12: false });
     pollBadge.innerHTML = `<span style="color: var(--green);">● S3 LIVE POLL</span> · updated ${nowStr}`;
   }
 
+  renderStatusBar(telemetry);
   renderLiveJobCard(telemetry);
   renderSpecs(telemetry);
   renderAmsSlots(telemetry);
   renderPrintHistory(telemetry);
 
-  const isPrinting = telemetry && telemetry.status === "PRINTING";
-  const hasStream = telemetry && (telemetry.streamUrl || telemetry.snapshotUrl);
+  if (!selection) {
+    showLiveView(viewportContainer, telemetry);
+  }
+}
 
-  if (isPrinting && hasStream) {
-    if (!userModeOverride && currentViewMode !== "stream") {
-      renderStreamFeed(viewportContainer, telemetry);
+// ─────────────────────────────────────────────
+// Local file loading (drag & drop / file picker)
+// ─────────────────────────────────────────────
+
+function openLocalFile(container, file) {
+  const name = file.name.toLowerCase();
+  if (!name.endsWith(".stl") && !name.endsWith(".3mf")) {
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    selection = { source: "file" };
+    ++loadGeneration;
+    document.querySelectorAll(".history-row").forEach(r => r.classList.remove("active-history-row"));
+    renderArrayBuffer(container, event.target.result, { title: file.name, formatHint: modelFormatFromUrl(name) });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function setupFileInputs(container) {
+  if (!container) {
+    return;
+  }
+  container.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    container.style.outline = "2px dashed var(--cyan)";
+  });
+  container.addEventListener("dragleave", () => {
+    container.style.outline = "none";
+  });
+  container.addEventListener("drop", (e) => {
+    e.preventDefault();
+    container.style.outline = "none";
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) {
+      openLocalFile(container, file);
     }
-  } else {
-    // Printer is NOT printing (STANDBY / IDLE / COMPLETED)
-    // Clear manual override when job finishes
-    if (!isPrinting) {
-      userModeOverride = false;
-    }
-    if (currentScene === null || currentViewMode === "stream") {
-      const modelUrl = (telemetry && telemetry.modelUrl) ? telemetry.modelUrl : "./output.stl";
-      const modelName = (telemetry && telemetry.modelName) ? telemetry.modelName : "output.stl";
-      await loadSampleModel(viewportContainer, modelUrl, modelName);
-    }
+  });
+
+  const fileInput = document.getElementById("stl-file-input");
+  if (fileInput) {
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) {
+        openLocalFile(container, file);
+      }
+      fileInput.value = "";
+    });
   }
 }
 
 function updateClock() {
-  const now = new Date();
-  const t = now.toLocaleTimeString("en-US", {
+  const t = new Date().toLocaleTimeString("en-US", {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false, timeZone: "America/Denver"
+    hour12: false, timeZone: "America/Denver", timeZoneName: "short"
   });
   const el = document.getElementById("live-clock");
   if (el) {
-    el.textContent = `${t} MST`;
-  }
-}
-
-function updateUptime(bootTime) {
-  const diffMs = Math.max(0, Date.now() - bootTime);
-  const totalSec = Math.floor(diffMs / 1000);
-  const days = Math.floor(totalSec / 86400);
-  const hours = Math.floor((totalSec % 86400) / 3600);
-  const minutes = Math.floor((totalSec % 3600) / 60);
-  const seconds = totalSec % 60;
-
-  let str = "uptime: ";
-  if (days > 0) {
-    str += `${days}d `;
-  }
-  if (hours > 0 || days > 0) {
-    str += `${hours}h `;
-  }
-  str += `${minutes}m ${seconds}s`;
-
-  const upEl = document.getElementById("uptime-counter");
-  if (upEl) {
-    upEl.textContent = str;
-  }
-}
-
-function initClockAndUptime() {
-  updateClock();
-  setInterval(updateClock, 1000);
-
-  let bootTimeStr = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("container_boot_time") : null;
-  if (!bootTimeStr) {
-    bootTimeStr = (Date.now() - 240000).toString();
-    if (typeof sessionStorage !== "undefined") {
-      sessionStorage.setItem("container_boot_time", bootTimeStr);
-    }
-  }
-  const bootTime = parseInt(bootTimeStr, 10);
-  updateUptime(bootTime);
-  setInterval(() => updateUptime(bootTime), 1000);
-
-  const yr = document.getElementById("current-year");
-  if (yr) {
-    yr.textContent = new Date().getFullYear();
+    el.textContent = t;
   }
 }
 
 function init() {
   const viewportContainer = document.getElementById("printing-container");
-  setupDragAndDrop(viewportContainer);
-  setupFileInputHandler(viewportContainer);
+  setupFileInputs(viewportContainer);
+
+  updateClock();
+  setInterval(updateClock, 1000);
+  const yr = document.getElementById("current-year");
+  if (yr) {
+    yr.textContent = new Date().getFullYear();
+  }
 
   updateTelemetryUI();
-  initClockAndUptime();
-
   if (pollTimer) {
     clearInterval(pollTimer);
   }
-  pollTimer = setInterval(updateTelemetryUI, 5000);
+  pollTimer = setInterval(updateTelemetryUI, POLL_INTERVAL_MS);
 }
 
 if (document.readyState === "loading") {
