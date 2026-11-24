@@ -101,6 +101,11 @@ DEFAULT_CLOUD_TOKEN_PATH = Path(os.environ.get(
 PUBLISH_INTERVAL_SEC = 3
 CLOUD_TASK_SYNC_INTERVAL_SEC = 600  # how often to refresh print history from Bambu's cloud task list
 CLOUD_API_BASE = "https://api.bambulab.com"
+# Real 3D models for prints that came from MakerWorld, fetched through the
+# cloud (no printer FTPS access needed). Capped so a huge project can't stall
+# the publish loop, bloat S3 or choke the browser viewer.
+MODEL_MAX_BYTES = int(float(os.environ.get("BAMBU_MODEL_MAX_MB", "40")) * 1024 * 1024)
+MODELS_PER_SYNC = 2
 # Same OrcaSlicer client identity bambu_cloud_login.py uses to get past
 # Bambu's Cloudflare bot protection.
 CLOUD_API_HEADERS = {
@@ -550,6 +555,8 @@ class BambuCloudTasks:
         self.bucket = bucket
         self.session = cloudscraper.create_scraper() if cloudscraper else None
         self._mirrored = set()
+        self._models_this_sync = 0
+        self._model_done = {}  # instanceId -> '/history/...3mf' URL, or None if skipped/failed
 
     def fetch_tasks(self, limit=MAX_HISTORY + 5):
         if not self.session:
@@ -603,13 +610,75 @@ class BambuCloudTasks:
             log.warning("Could not mirror cover image for task %s: %s", task.get("id"), e)
             return None
 
+    def mirror_model(self, task):
+        """
+        Copy the print's real 3MF into our bucket, for prints sliced from a
+        MakerWorld design (task has an instanceId). Uses the same download the
+        MakerWorld site gives a logged-in account. Private/own-sliced projects
+        have no instanceId and expose no geometry through the cloud API, so
+        they get no model. One file per instance, shared by repeat prints.
+        Returns the site URL, or None. Never raises.
+        """
+        instance = task.get("instanceId")
+        if not instance:
+            return None
+        key = f"history/model-{instance}.3mf"
+        if instance in self._model_done:
+            return self._model_done[instance]
+        try:
+            self.s3.head_object(Bucket=self.bucket, Key=key)
+            self._model_done[instance] = f"/{key}"
+            return self._model_done[instance]
+        except Exception:
+            pass  # not mirrored yet
+        if self._models_this_sync >= MODELS_PER_SYNC:
+            return None  # try again next sync; don't memoize
+        self._models_this_sync += 1
+        self._model_done[instance] = None  # memoize failures/skips until restart
+        headers = {**{k: v for k, v in CLOUD_API_HEADERS.items() if k != "User-Agent"},
+                   "Authorization": f"Bearer {self.access_token}"}
+        try:
+            meta = self.session.get(
+                f"{CLOUD_API_BASE}/v1/design-service/instance/{instance}/f3mf",
+                params={"type": "download"}, headers=headers, timeout=20,
+            )
+            meta.raise_for_status()
+            url = meta.json().get("url")
+            if not url:
+                return None
+            with self.session.get(url, stream=True, timeout=60) as resp:
+                resp.raise_for_status()
+                size = int(resp.headers.get("Content-Length") or 0)
+                if size > MODEL_MAX_BYTES:
+                    log.info("Skipping model for instance %s: %.0f MB exceeds the %.0f MB cap (BAMBU_MODEL_MAX_MB)",
+                             instance, size / 1048576, MODEL_MAX_BYTES / 1048576)
+                    return None
+                body = bytearray()
+                for chunk in resp.iter_content(1 << 20):
+                    body.extend(chunk)
+                    if len(body) > MODEL_MAX_BYTES:
+                        log.info("Skipping model for instance %s: over the size cap", instance)
+                        return None
+            if body[:2] != b"PK":
+                log.warning("Model download for instance %s wasn't a 3MF/zip file", instance)
+                return None
+            self.s3.put_object(Bucket=self.bucket, Key=key, Body=bytes(body), ContentType="model/3mf")
+            log.info("Uploaded model for instance %s (%.1f MB) -> s3://%s/%s", instance, len(body) / 1048576, self.bucket, key)
+            self._model_done[instance] = f"/{key}"
+            return self._model_done[instance]
+        except Exception as e:
+            log.warning("Could not fetch model for task %s (instance %s): %s", task.get("id"), instance, e)
+            return None
+
     def history(self, tasks):
+        self._models_this_sync = 0
         entries = []
         for task in tasks:
             entry = cloud_task_to_entry(task)
             if not entry:
                 continue
             entry["thumbnailUrl"] = self.mirror_cover(task, f"history/{entry['id']}.png")
+            entry["modelUrl"] = self.mirror_model(task)
             entries.append(entry)
         return entries[:MAX_HISTORY]
 
