@@ -17,6 +17,9 @@ services:
   camera-relay:
     build: ./camera-relay
     image: 3dprinting-camera-relay
+    # Started and stopped on demand by camera-relay/controller.sh, so it's in a
+    # profile and a plain `docker compose up -d` doesn't start it.
+    profiles: ["camera"]
     restart: unless-stopped
     env_file:
       - .env

@@ -1,0 +1,14 @@
+[Unit]
+Description=Start/stop the 3D printer YouTube camera relay with print activity
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+# Adjust the path if the repo isn't at ~/chrispivonka.com.
+ExecStart=%h/chrispivonka.com/subdomains/3dprinting/camera-relay/controller.sh
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
