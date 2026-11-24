@@ -11,9 +11,10 @@ Supports two connection modes:
     account. Use this if you want to keep the printer on Bambu Cloud mode
     (Bambu Handy, remote access, etc.) instead of switching to LAN-only +
     Developer Mode. Requires running bambu_cloud_login.py once first (see
-    below). There's no live 3D model in this mode, since that needs local
-    FTPS access, so print history (real project names, filament used,
-    plate preview images) comes from Bambu's cloud task list instead.
+    below). Print history (real project names, filament used, plate
+    preview images) comes from Bambu's cloud task list. If you also set
+    BAMBU_IP + BAMBU_ACCESS_CODE, it tries to download each print's 3D
+    model from the printer over FTPS, if the printer's firmware allows it.
 
   lan — connects directly to the printer's local MQTT broker. Requires
     LAN-only mode + Developer Mode enabled on the printer (which disconnects
@@ -64,7 +65,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timezone
-from ftplib import FTP_TLS
+from ftplib import FTP, FTP_TLS
 from pathlib import Path
 
 try:
@@ -358,14 +359,63 @@ def load_cloud_token(token_path):
     return f"u_{uid}", access_token
 
 
+class ImplicitFTP_TLS(FTP_TLS):
+    """
+    Bambu printers serve *implicit* FTPS on port 990: TLS starts as soon as
+    the TCP connection opens. Python's FTP_TLS only does explicit FTPS
+    (plain connect, then AUTH TLS), which the printer never answers, so wrap
+    the control socket in TLS on connect. The printer's certificate is
+    self-signed, so it can't be verified.
+    """
+
+    def __init__(self, *args, **kwargs):
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        super().__init__(*args, context=context, **kwargs)
+        self._sock = None
+
+    @property
+    def sock(self):
+        return self._sock
+
+    @sock.setter
+    def sock(self, value):
+        if value is not None and not isinstance(value, ssl.SSLSocket):
+            value = self.context.wrap_socket(value, server_hostname=self.host)
+        self._sock = value
+
+    def ntransfercmd(self, cmd, rest=None):
+        # Reuse the control connection's TLS session for data connections;
+        # some printers reject data connections that don't.
+        conn, size = FTP.ntransfercmd(self, cmd, rest)
+        if self._prot_p:
+            conn = self.context.wrap_socket(conn, server_hostname=self.host, session=self.sock.session)
+        return conn, size
+
+
+def newest_3mf(ftps, names):
+    """The most recently modified .3mf among names, using MDTM; None if unknown."""
+    newest, newest_time = None, ""
+    for name in names:
+        if not name.lower().endswith(".3mf"):
+            continue
+        try:
+            stamp = ftps.sendcmd(f"MDTM {name}").split()[-1]
+        except Exception:
+            continue
+        if stamp > newest_time:
+            newest, newest_time = name, stamp
+    return newest
+
+
 def try_fetch_current_3mf(host, access_code, gcode_file, subtask_name=None):
     """
     Best-effort: pull the active print's .3mf project file off the printer's
-    SD card over FTPS so the site's 3D viewer can render the real model
-    instead of the bundled sample. Bambu's on-device FTPS layout varies by
-    firmware/model, so this is deliberately non-fatal — any failure here
-    just means modelUrl stays unset and the frontend falls back to its
-    bundled sample STL, which is expected and fine.
+    storage over FTPS so the site's 3D viewer can render the real model.
+    Bambu's on-device layout varies by firmware/model, and newer firmware
+    may refuse third-party access outside Developer Mode, so this is
+    deliberately non-fatal: on failure modelUrl just stays unset.
     """
     if not gcode_file:
         return None
@@ -374,7 +424,7 @@ def try_fetch_current_3mf(host, access_code, gcode_file, subtask_name=None):
     if subtask_name:
         candidates = [f"{subtask_name}.gcode.3mf", f"{subtask_name}.3mf"] + candidates
     try:
-        ftps = FTP_TLS()
+        ftps = ImplicitFTP_TLS()
         ftps.connect(host, FTPS_PORT, timeout=10)
         ftps.login(LAN_MQTT_USERNAME, access_code)
         ftps.prot_p()
@@ -384,13 +434,20 @@ def try_fetch_current_3mf(host, access_code, gcode_file, subtask_name=None):
             except Exception:
                 continue
             names = ftps.nlst()
+            match = None
             for candidate in candidates:
                 match = next((n for n in names if n.rsplit("/", 1)[-1] == candidate), None)
                 if match:
-                    buf = bytearray()
-                    ftps.retrbinary(f"RETR {match}", buf.extend)
-                    ftps.quit()
-                    return bytes(buf), match
+                    break
+            if not match and directory == "/cache":
+                # Cloud prints don't always keep the project name; fall
+                # back to the most recently written .3mf in the cache.
+                match = newest_3mf(ftps, names)
+            if match:
+                buf = bytearray()
+                ftps.retrbinary(f"RETR {match}", buf.extend)
+                ftps.quit()
+                return bytes(buf), match
         ftps.quit()
     except Exception as e:
         log.debug("FTPS model fetch skipped: %s", e)
@@ -445,6 +502,32 @@ def cloud_task_to_entry(task):
         "completedAt": iso_utc(end) if end else None,
         "status": status,
     }
+
+
+def carry_over_models(old_entries, new_entries, window_sec=15 * 60):
+    """
+    Keep 3D models this publisher archived (history/job-*.3mf) when the
+    cloud task list replaces the history: match by id, else by title and a
+    completion time within window_sec.
+    """
+    def ts(entry):
+        when = parse_cloud_time(entry.get("completedAt"))
+        return when.timestamp() if when else None
+
+    with_models = [e for e in old_entries if e.get("modelUrl")]
+    for entry in new_entries:
+        if entry.get("modelUrl"):
+            continue
+        for old in with_models:
+            same_id = old.get("id") == entry.get("id")
+            close = (
+                old.get("title") == entry.get("title")
+                and ts(old) is not None and ts(entry) is not None
+                and abs(ts(old) - ts(entry)) <= window_sec
+            )
+            if same_id or close:
+                entry["modelUrl"] = old["modelUrl"]
+                break
 
 
 class BambuCloudTasks:
@@ -541,7 +624,7 @@ class BambuCloudTasks:
 
 
 class BambuMQTTPublisher:
-    def __init__(self, mode, host, serial, bucket, region, access_code=None,
+    def __init__(self, mode, host, serial, bucket, region, access_code=None, printer_ip=None,
                  cloud_username=None, cloud_password=None, youtube_video_id=None):
         if boto3 is None or mqtt is None:
             raise SystemExit("Missing dependencies. Run: pip install -r requirements.txt")
@@ -549,7 +632,8 @@ class BambuMQTTPublisher:
         self.mode = mode
         self.host = host
         self.serial = serial
-        self.access_code = access_code  # lan mode only — also used for FTPS model fetch
+        self.access_code = access_code  # MQTT auth in lan mode; FTPS model fetch in both modes
+        self.printer_ip = printer_ip or (host if mode == "lan" else None)
         self.bucket = bucket
         self.s3 = boto3.client("s3", region_name=region)
         stream_url = (
@@ -641,15 +725,15 @@ class BambuMQTTPublisher:
             log.warning("Could not archive model for completed job %s: %s", entry["id"], e)
 
     def _maybe_fetch_model(self):
-        if self.mode != "lan":
-            return  # FTPS model fetch needs local network access; not available via cloud
+        if not (self.printer_ip and self.access_code):
+            return  # needs the printer's LAN IP + access code (set BAMBU_IP / BAMBU_ACCESS_CODE in cloud mode too)
         gcode_file = self.state.raw.get("gcode_file")
         job_key = self.state.job_key
         if not gcode_file or job_key == self._last_model_fetch_job:
             return
         self._last_model_fetch_job = job_key
         result = try_fetch_current_3mf(
-            self.host, self.access_code, gcode_file, self.state.raw.get("subtask_name"),
+            self.printer_ip, self.access_code, gcode_file, self.state.raw.get("subtask_name"),
         )
         if not result:
             return
@@ -675,6 +759,7 @@ class BambuMQTTPublisher:
             return
         history = self.cloud_tasks.history(tasks)
         if history:
+            carry_over_models(self.state.history, history)
             # The cloud list is authoritative: it has real names, filament and
             # previews, and covers prints made before this publisher started.
             self.state.history = history
@@ -729,9 +814,9 @@ def main():
     parser = argparse.ArgumentParser(description="Publish live Bambu Lab telemetry to S3")
     parser.add_argument("--mode", choices=["cloud", "lan"], default=os.environ.get("BAMBU_CONNECTION_MODE", "cloud"),
                          help="cloud: via Bambu account + bambu_cloud_login.py (default). lan: direct to printer, requires LAN-only + Developer Mode.")
-    parser.add_argument("--host", default=os.environ.get("BAMBU_IP"), help="Printer LAN IP address (lan mode only)")
+    parser.add_argument("--host", default=os.environ.get("BAMBU_IP"), help="Printer LAN IP address (lan mode: required; cloud mode: optional, enables fetching the 3D model over FTPS)")
     parser.add_argument("--serial", default=os.environ.get("BAMBU_SERIAL"), help="Printer serial number (both modes)")
-    parser.add_argument("--access-code", default=os.environ.get("BAMBU_ACCESS_CODE"), help="LAN-only mode access code (lan mode only)")
+    parser.add_argument("--access-code", default=os.environ.get("BAMBU_ACCESS_CODE"), help="Printer access code (lan mode: required; cloud mode: optional, with --host enables 3D model fetch)")
     parser.add_argument("--cloud-token-path", default=str(DEFAULT_CLOUD_TOKEN_PATH), help="Path to the token saved by bambu_cloud_login.py (cloud mode only)")
     parser.add_argument("--stack-name", default=os.environ.get("PRINTING_STACK_NAME", "printing3d"), help="CloudFormation stack name to resolve the bucket from")
     parser.add_argument("--bucket", default=None, help="S3 bucket (skips CloudFormation lookup)")
@@ -743,6 +828,7 @@ def main():
         parser.error("missing required value: --serial (flag or BAMBU_SERIAL env var)")
 
     cloud_username = cloud_password = None
+    printer_ip = args.host
     if args.mode == "lan":
         missing = [name for name, val in (("--host", args.host), ("--access-code", args.access_code)) if not val]
         if missing:
@@ -752,6 +838,7 @@ def main():
         if not token:
             raise SystemExit(1)  # load_cloud_token already logged a specific, actionable error
         cloud_username, cloud_password = token
+        printer_ip = args.host  # optional in cloud mode: used only for the FTPS model fetch
         args.host = CLOUD_MQTT_HOST
 
     bucket = args.bucket or resolve_bucket(args.stack_name, args.region)
@@ -760,6 +847,7 @@ def main():
     publisher = BambuMQTTPublisher(
         args.mode, args.host, args.serial, bucket, args.region,
         access_code=args.access_code,
+        printer_ip=printer_ip,
         cloud_username=cloud_username, cloud_password=cloud_password,
         youtube_video_id=args.youtube_video_id,
     )
