@@ -515,6 +515,13 @@ etc. all keep working) — trade-off is no live 3D model preview during
 printing, since that specific feature needs local FTPS access. Print
 history and everything else works the same either way.
 
+Past prints still get real 3D models in cloud mode: for prints sliced from a
+MakerWorld design, the publisher downloads the model through your Bambu
+account and stores it as `history/model-<instanceId>.3mf` (at most 2 new
+models per 10-minute sync, skipping files over `BAMBU_MODEL_MAX_MB`, default
+40). Privately sliced projects expose no geometry through the cloud API, so
+they get no model.
+
 The container restarts automatically (`restart: unless-stopped`) on crash
 or host reboot — but note it won't survive a *token* expiring, only
 process/host restarts. Print history and the cloud token persist across
