@@ -114,8 +114,13 @@ def main():
     # Confirm it works and show which channel it's for, so a wrong account is obvious.
     chan = _http_json(f"{API_BASE}/channels?part=snippet&mine=true",
                       headers={"Authorization": f"Bearer {tokens['access_token']}"})
-    title = ((chan.get("items") or [{}])[0].get("snippet") or {}).get("title", "(no channel found)")
-    print(f"Saved YOUTUBE_OAUTH_REFRESH_TOKEN to .env. Approved for channel: {title}")
+    item = (chan.get("items") or [{}])[0]
+    title = (item.get("snippet") or {}).get("title", "(no channel found)")
+    print(f"Saved YOUTUBE_OAUTH_REFRESH_TOKEN to .env. Approved for channel: {title} ({item.get('id', '?')})")
+    expected = read_env("YOUTUBE_CHANNEL_ID")
+    if expected and item.get("id") != expected:
+        print(f"WARNING: expected channel {expected} (YOUTUBE_CHANNEL_ID) but approved a different one. "
+              "Revoke at https://myaccount.google.com/permissions and run this again with the right account.")
 
 
 if __name__ == "__main__":

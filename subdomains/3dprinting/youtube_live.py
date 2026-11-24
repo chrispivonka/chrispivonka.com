@@ -57,20 +57,33 @@ class YouTubeLive:
         self._expires_at = time.time() + int(data.get("expires_in", 3600))
         return self._access_token
 
+    def _list_broadcasts(self, **params):
+        return _http_json(
+            f"{API_BASE}/liveBroadcasts?" + urllib.parse.urlencode({"part": "id,status", **params}),
+            headers={"Authorization": f"Bearer {self._token()}"},
+        )
+
     def active_video_id(self):
         """
         Returns (ok, video_id): ok=False means the lookup itself failed (network,
         revoked token, quota) so the caller should fall back; ok=True with
         video_id None means the API answered and nothing is live right now.
         Never raises.
+
+        broadcastType must be "all": the default ("event") only returns scheduled
+        event broadcasts and would skip persistent ones. The API doc says to give
+        exactly one of broadcastStatus / id / mine, so ask for active broadcasts
+        first, and if the API rejects that combination fall back to listing the
+        channel's own broadcasts and filtering here.
         """
         try:
-            data = _http_json(
-                f"{API_BASE}/liveBroadcasts?" + urllib.parse.urlencode({
-                    "part": "id,status", "broadcastStatus": "active", "mine": "true", "maxResults": 5,
-                }),
-                headers={"Authorization": f"Bearer {self._token()}"},
-            )
+            try:
+                data = self._list_broadcasts(broadcastStatus="active", broadcastType="all", maxResults=5)
+            except urllib.error.HTTPError as e:
+                if e.code != 400:
+                    raise
+                log.info("liveBroadcasts rejected broadcastStatus=active (HTTP 400); listing own broadcasts instead")
+                data = self._list_broadcasts(mine="true", broadcastType="all", maxResults=50)
         except urllib.error.HTTPError as e:
             detail = ""
             try:

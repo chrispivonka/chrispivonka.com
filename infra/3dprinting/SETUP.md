@@ -641,16 +641,20 @@ and falls back to `YOUTUBE_VIDEO_ID` if the lookup fails. While nothing is
 live yet the page shows the 3D model instead of an embed.
 
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a
-   project (e.g. `3d-printer-stream`).
+   project (e.g. `3d-printer-stream`) and make sure it's selected.
 2. **APIs & Services > Library**: search **YouTube Data API v3** and click
    **Enable**.
-3. **APIs & Services > OAuth consent screen** (or **Google Auth Platform**):
-   set the user type to **External**, fill in an app name and your email, and
-   under **Audience** set the publishing status to **In production**. In
-   "Testing" mode refresh tokens expire after 7 days. The app stays
-   "unverified" (fine for personal use; you click through a warning once).
-4. **APIs & Services > Credentials > Create credentials > OAuth client ID**,
-   type **Desktop app**. Copy the client ID and client secret into `.env` as
+3. Open the **Google Auth Platform** pages (console search: "Google Auth
+   Platform"). If it offers **Get started**, fill in an app name and your
+   email and choose **External** as the audience. Then, on **Audience**, click
+   **Publish app** so the status is **In production**. In *Testing* status,
+   Google expires refresh tokens after 7 days. The app stays unverified for
+   this scope, so you'll click through a warning once; that's fine for a
+   personal app.
+4. On the **Clients** page click **CREATE CLIENT**, choose application type
+   **Desktop app**, name it, and click **CREATE**. Copy the **client secret
+   now**: Google shows it in full only at creation (afterwards only the last
+   four characters). Put the client ID and secret in `.env` as
    `YOUTUBE_OAUTH_CLIENT_ID` and `YOUTUBE_OAUTH_CLIENT_SECRET`.
 5. On the machine with a browser, from `subdomains/3dprinting`:
 
@@ -664,8 +668,9 @@ live yet the page shows the 3D model instead of an embed.
 6. `docker compose up -d --build bambu-publisher`. The log shows
    `Live stream: found a live broadcast` once the relay is up during a print.
 
-The token only has the `youtube.readonly` scope and each lookup costs 1 unit
-of the 10,000/day quota. If the token is ever revoked, lookups fail quietly
+The token only has the `youtube.readonly` scope, which Google's docs list as
+sufficient for `liveBroadcasts.list`. Set `YOUTUBE_CHANNEL_ID` to get a warning
+if you approve the wrong channel. If the token is ever revoked, lookups fail quietly
 and the fallback ID is used; rerun `youtube_auth.py` to fix it.
 
 ---

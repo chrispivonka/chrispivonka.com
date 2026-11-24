@@ -57,6 +57,33 @@ class ActiveVideoId(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", fake_urlopen({youtube_live.TOKEN_URL: err})):
             self.assertEqual(self.yt.active_video_id(), (False, None))
 
+    def test_asks_for_all_broadcast_types_with_a_single_filter(self):
+        urls = []
+        def opener(req, timeout=None):
+            urls.append(req.full_url)
+            return io.BytesIO(json.dumps(TOKEN if req.full_url.startswith(youtube_live.TOKEN_URL) else {"items": []}).encode())
+        with mock.patch("urllib.request.urlopen", opener):
+            self.yt.active_video_id()
+        q = urls[-1]
+        self.assertIn("broadcastType=all", q)
+        self.assertIn("broadcastStatus=active", q)
+        self.assertNotIn("mine=", q)
+
+    def test_falls_back_to_mine_when_status_filter_is_rejected(self):
+        urls = []
+        def opener(req, timeout=None):
+            urls.append(req.full_url)
+            if req.full_url.startswith(youtube_live.TOKEN_URL):
+                return io.BytesIO(json.dumps(TOKEN).encode())
+            if "broadcastStatus=" in req.full_url:
+                raise urllib.error.HTTPError(req.full_url, 400, "bad", {}, io.BytesIO(b"{}"))
+            return io.BytesIO(json.dumps({"items": [
+                {"id": "old", "status": {"lifeCycleStatus": "complete"}},
+                {"id": "now", "status": {"lifeCycleStatus": "live"}}]}).encode())
+        with mock.patch("urllib.request.urlopen", opener):
+            self.assertEqual(self.yt.active_video_id(), (True, "now"))
+        self.assertIn("mine=true", urls[-1])
+
     def test_access_token_is_cached(self):
         calls = []
         def opener(req, timeout=None):
