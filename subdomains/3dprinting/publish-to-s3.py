@@ -106,6 +106,7 @@ CLOUD_API_BASE = "https://api.bambulab.com"
 # the publish loop, bloat S3 or choke the browser viewer.
 MODEL_MAX_BYTES = int(float(os.environ.get("BAMBU_MODEL_MAX_MB", "40")) * 1024 * 1024)
 MODELS_PER_SYNC = 2
+LIVE_MODEL_RETRY_SEC = 60  # re-check the cloud task list this often while a job has no model yet
 # Same OrcaSlicer client identity bambu_cloud_login.py uses to get past
 # Bambu's Cloudflare bot protection.
 CLOUD_API_HEADERS = {
@@ -219,6 +220,7 @@ class PrinterState:
             self.job_key = job_key
             self.last_gcode_file = gcode_file
             self.raw.pop("_live_model_key", None)
+            self.raw.pop("_live_model_url", None)
             self.thumbnail_url = None
             self.last_active_material = None
             self.print_start = time.time() if gcode_state == "RUNNING" else None
@@ -610,7 +612,7 @@ class BambuCloudTasks:
             log.warning("Could not mirror cover image for task %s: %s", task.get("id"), e)
             return None
 
-    def mirror_model(self, task):
+    def mirror_model(self, task, force=False):
         """
         Copy the print's real 3MF into our bucket, for prints sliced from a
         MakerWorld design (task has an instanceId). Uses the same download the
@@ -631,7 +633,7 @@ class BambuCloudTasks:
             return self._model_done[instance]
         except Exception:
             pass  # not mirrored yet
-        if self._models_this_sync >= MODELS_PER_SYNC:
+        if not force and self._models_this_sync >= MODELS_PER_SYNC:
             return None  # try again next sync; don't memoize
         self._models_this_sync += 1
         self._model_done[instance] = None  # memoize failures/skips until restart
@@ -822,7 +824,16 @@ class BambuMQTTPublisher:
         if not self.cloud_tasks:
             return
         now = time.time()
-        if not self._cloud_sync_requested and now - self._last_cloud_sync < CLOUD_TASK_SYNC_INTERVAL_SEC:
+        # While a job is active and its model isn't known yet, retry quickly: the
+        # new task can take a moment to show up in Bambu's task list.
+        waiting_for_model = (
+            self.state.raw.get("gcode_state") in ("RUNNING", "PREPARE", "PAUSE")
+            and not self.state.raw.get("_live_model_key")
+            and not self.state.raw.get("_live_model_url")
+            and now - self._last_cloud_sync >= LIVE_MODEL_RETRY_SEC
+        )
+        if not self._cloud_sync_requested and not waiting_for_model \
+                and now - self._last_cloud_sync < CLOUD_TASK_SYNC_INTERVAL_SEC:
             return
         self._cloud_sync_requested = False
         self._last_cloud_sync = now
@@ -839,6 +850,11 @@ class BambuMQTTPublisher:
         running = self.cloud_tasks.running_task(tasks, self.state.raw)
         if running and self.state.raw.get("gcode_state") in ("RUNNING", "PREPARE", "PAUSE"):
             self.state.thumbnail_url = self.cloud_tasks.mirror_cover(running, f"live/task-{running['id']}.png")
+            # No FTPS model (needs the printer's access code)? Use the cloud copy.
+            if not self.state.raw.get("_live_model_key"):
+                url = self.cloud_tasks.mirror_model(running, force=True)
+                if url:
+                    self.state.raw["_live_model_url"] = url
         log.info("Synced %d prints from the Bambu cloud task list", len(history))
 
     def _publish_status(self):
@@ -846,6 +862,8 @@ class BambuMQTTPublisher:
         live_key = self.state.raw.get("_live_model_key")
         if live_key:
             payload["modelUrl"] = f"/{live_key}"
+        elif self.state.raw.get("_live_model_url"):
+            payload["modelUrl"] = self.state.raw["_live_model_url"]
         body = json.dumps(payload, indent=2).encode("utf-8")
         self.s3.put_object(
             Bucket=self.bucket,
