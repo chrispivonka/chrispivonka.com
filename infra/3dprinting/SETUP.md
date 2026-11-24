@@ -632,6 +632,44 @@ journalctl --user -u bambu-camera-controller -f
 
 ---
 
+### 8e. Look up the live video ID automatically (keeps the stream unlisted)
+
+YouTube can give each new broadcast a new video ID, so a fixed
+`YOUTUBE_VIDEO_ID` goes stale whenever the stream ends. With YouTube API
+access the publisher looks up the active broadcast every 30s while printing
+and falls back to `YOUTUBE_VIDEO_ID` if the lookup fails. While nothing is
+live yet the page shows the 3D model instead of an embed.
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a
+   project (e.g. `3d-printer-stream`).
+2. **APIs & Services > Library**: search **YouTube Data API v3** and click
+   **Enable**.
+3. **APIs & Services > OAuth consent screen** (or **Google Auth Platform**):
+   set the user type to **External**, fill in an app name and your email, and
+   under **Audience** set the publishing status to **In production**. In
+   "Testing" mode refresh tokens expire after 7 days. The app stays
+   "unverified" (fine for personal use; you click through a warning once).
+4. **APIs & Services > Credentials > Create credentials > OAuth client ID**,
+   type **Desktop app**. Copy the client ID and client secret into `.env` as
+   `YOUTUBE_OAUTH_CLIENT_ID` and `YOUTUBE_OAUTH_CLIENT_SECRET`.
+5. On the machine with a browser, from `subdomains/3dprinting`:
+
+   ```bash
+   python3 youtube_auth.py
+   ```
+
+   Approve read-only access as the account that owns the channel. It writes
+   `YOUTUBE_OAUTH_REFRESH_TOKEN` into `.env` (never printed) and prints the
+   channel name so a wrong account is obvious.
+6. `docker compose up -d --build bambu-publisher`. The log shows
+   `Live stream: found a live broadcast` once the relay is up during a print.
+
+The token only has the `youtube.readonly` scope and each lookup costs 1 unit
+of the 10,000/day quota. If the token is ever revoked, lookups fail quietly
+and the fallback ID is used; rerun `youtube_auth.py` to fix it.
+
+---
+
 If ffmpeg exits immediately with a codec/negotiation error, YouTube
 likely rejected the passthrough stream — edit `camera-relay/relay.sh` and
 swap `-c:v copy` for `-c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k`,

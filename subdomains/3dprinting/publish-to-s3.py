@@ -68,6 +68,8 @@ from datetime import datetime, timezone
 from ftplib import FTP, FTP_TLS
 from pathlib import Path
 
+from youtube_live import YouTubeLive, embed_url
+
 try:
     import boto3
 except ImportError:
@@ -106,6 +108,7 @@ CLOUD_API_BASE = "https://api.bambulab.com"
 # the publish loop, bloat S3 or choke the browser viewer.
 MODEL_MAX_BYTES = int(float(os.environ.get("BAMBU_MODEL_MAX_MB", "40")) * 1024 * 1024)
 MODELS_PER_SYNC = 2
+YOUTUBE_LOOKUP_INTERVAL_SEC = 30  # how often to re-check which broadcast is live while printing
 LIVE_MODEL_RETRY_SEC = 60  # re-check the cloud task list this often while a job has no model yet
 # Same OrcaSlicer client identity bambu_cloud_login.py uses to get past
 # Bambu's Cloudflare bot protection.
@@ -702,7 +705,7 @@ class BambuCloudTasks:
 
 class BambuMQTTPublisher:
     def __init__(self, mode, host, serial, bucket, region, access_code=None, printer_ip=None,
-                 cloud_username=None, cloud_password=None, youtube_video_id=None):
+                 cloud_username=None, cloud_password=None, youtube_video_id=None, youtube=None):
         if boto3 is None or mqtt is None:
             raise SystemExit("Missing dependencies. Run: pip install -r requirements.txt")
 
@@ -713,11 +716,13 @@ class BambuMQTTPublisher:
         self.printer_ip = printer_ip or (host if mode == "lan" else None)
         self.bucket = bucket
         self.s3 = boto3.client("s3", region_name=region)
-        stream_url = (
-            f"https://www.youtube-nocookie.com/embed/{youtube_video_id}?autoplay=1&mute=1"
-            if youtube_video_id else None
-        )
-        self.state = PrinterState(stream_url=stream_url)
+        # YOUTUBE_VIDEO_ID is a fixed fallback. With YouTube API access, the live
+        # video ID is looked up while printing instead, because YouTube may give
+        # each new broadcast a new ID (see youtube_live.py).
+        self._fallback_stream_url = embed_url(youtube_video_id) if youtube_video_id else None
+        self.youtube = youtube
+        self._last_youtube_lookup = 0
+        self.state = PrinterState(stream_url=None if youtube else self._fallback_stream_url)
         self._last_model_fetch_job = None
         self.cloud_tasks = (
             BambuCloudTasks(cloud_password, serial, self.s3, bucket) if mode == "cloud" else None
@@ -860,6 +865,25 @@ class BambuMQTTPublisher:
                     self.state.raw["_live_model_url"] = url
         log.info("Synced %d prints from the Bambu cloud task list", len(history))
 
+    def _maybe_refresh_stream_url(self):
+        if not self.youtube:
+            return
+        if self.state.raw.get("gcode_state") not in ("RUNNING", "PREPARE", "PAUSE"):
+            self._last_youtube_lookup = 0  # look up right away when the next print starts
+            return
+        now = time.time()
+        if now - self._last_youtube_lookup < YOUTUBE_LOOKUP_INTERVAL_SEC:
+            return
+        self._last_youtube_lookup = now
+        ok, video_id = self.youtube.active_video_id()
+        if not ok:
+            new_url = self._fallback_stream_url  # lookup failed: use the fixed ID if there is one
+        else:
+            new_url = embed_url(video_id) if video_id else None  # None: not live yet, show the model
+        if new_url != self.state.stream_url:
+            log.info("Live stream: %s", "found a live broadcast" if new_url else "none live yet")
+            self.state.stream_url = new_url
+
     def _publish_status(self):
         payload = self.state.to_payload()
         live_key = self.state.raw.get("_live_model_key")
@@ -893,6 +917,7 @@ class BambuMQTTPublisher:
                     last_pushall = now
                 self._maybe_fetch_model()
                 self._maybe_sync_cloud_history()
+                self._maybe_refresh_stream_url()
                 self._publish_status()
                 time.sleep(PUBLISH_INTERVAL_SEC)
         finally:
@@ -943,6 +968,13 @@ def main():
         printer_ip=printer_ip,
         cloud_username=cloud_username, cloud_password=cloud_password,
         youtube_video_id=args.youtube_video_id,
+        youtube=(
+            YouTubeLive(os.environ["YOUTUBE_OAUTH_CLIENT_ID"], os.environ["YOUTUBE_OAUTH_CLIENT_SECRET"],
+                        os.environ["YOUTUBE_OAUTH_REFRESH_TOKEN"])
+            if all(os.environ.get(k) for k in (
+                "YOUTUBE_OAUTH_CLIENT_ID", "YOUTUBE_OAUTH_CLIENT_SECRET", "YOUTUBE_OAUTH_REFRESH_TOKEN"))
+            else None
+        ),
     )
     signal.signal(signal.SIGTERM, publisher.stop)
     signal.signal(signal.SIGINT, publisher.stop)

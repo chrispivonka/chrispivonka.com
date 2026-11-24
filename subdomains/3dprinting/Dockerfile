@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY publish-to-s3.py bambu_cloud_login.py .
+COPY publish-to-s3.py bambu_cloud_login.py youtube_live.py .
 
 # Local history/state (and, in cloud mode, the login token) persists across
 # restarts via a mounted volume — see docker-compose.yml.
