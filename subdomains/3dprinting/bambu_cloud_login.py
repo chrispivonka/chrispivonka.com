@@ -85,6 +85,9 @@ def _request_with_retry(make_request, url, parse_json=True):
     for attempt in range(1, CLOUDFLARE_RETRY_ATTEMPTS + 1):
         resp = make_request()
         if resp.text.strip():
+            if not resp.ok:
+                print(f"  HTTP {resp.status_code} from {url}: {resp.text[:300]!r}")
+                print(f"  server={resp.headers.get('server')} cf-ray={resp.headers.get('cf-ray')}")
             resp.raise_for_status()
             return resp.json() if parse_json else resp
         last_error = f"Empty response from {url}"
@@ -100,7 +103,10 @@ def api_post(scraper, url, body):
 
 def api_get(scraper, url, token):
     return _request_with_retry(
-        lambda: scraper.get(url, headers={**HEADERS, "Authorization": f"Bearer {token}"}, timeout=15), url,
+        # Drop the User-Agent override on authenticated GETs: Cloudflare 403s the
+        # combination of the bambu_network_agent UA + X-BBL-* headers against
+        # cloudscraper's Chrome TLS fingerprint, but allows either alone.
+        lambda: scraper.get(url, headers={**{k: v for k, v in HEADERS.items() if k != "User-Agent"}, "Authorization": f"Bearer {token}"}, timeout=15), url,
     )
 
 
@@ -125,8 +131,16 @@ def handle_email_code(scraper, email):
 def handle_authenticator_tfa(scraper, tfa_key):
     code = input("Enter the code from your authenticator app: ").strip()
     url = f"{SIGNIN_BASE}/api/sign-in/tfa"
+    # bambulab.com's web endpoints use a double-submit CSRF check: GET /api/csrf
+    # sets a bbl_csrf_token cookie, whose value must be echoed back in an
+    # x-bbl-csrf-token header. Without it the server returns 403 missing_cookie.
+    scraper.get(f"{SIGNIN_BASE}/api/csrf", headers=HEADERS, timeout=15)
+    csrf = scraper.cookies.get("bbl_csrf_token")
+    if not csrf:
+        raise SystemExit("Could not obtain a CSRF token from bambulab.com/api/csrf")
+    tfa_headers = {**HEADERS, "x-bbl-csrf-token": csrf}
     resp = _request_with_retry(
-        lambda: scraper.post(url, headers=HEADERS, json={"tfaKey": tfa_key, "tfaCode": code}, timeout=15),
+        lambda: scraper.post(url, headers=tfa_headers, json={"tfaKey": tfa_key, "tfaCode": code}, timeout=15),
         url, parse_json=False,
     )
     token = resp.cookies.get_dict().get("token")
