@@ -588,8 +588,14 @@ building the rest of this out.
 
 ### 8c. Run the relay
 
-Already included in `docker compose up -d --build` from step 7 once
-`YOUTUBE_STREAM_KEY` is set in `.env` — it's the `camera-relay` service.
+The `camera-relay` service is in the `camera` compose profile, so a plain
+`docker compose up -d --build` does **not** start it — step 8d runs it on
+demand. To try it by hand once `YOUTUBE_STREAM_KEY` is set in `.env`:
+
+```bash
+docker compose up -d --build camera-relay
+```
+
 Check it directly:
 
 ```bash
@@ -601,6 +607,30 @@ You should see ffmpeg's normal stream-copy output with no repeated
 `youtube.com/watch?v=<VIDEO_ID>` within ~30s, then check
 `https://3dprinting.chrispivonka.com` — the page should replace the
 "LIVE SNAPSHOT" placeholder with the embedded YouTube feed.
+
+### 8d. Only stream while printing
+
+`camera-relay/controller.sh` watches `printer-status.json` and starts the
+relay when a print begins (`PRINTING` or `PAUSED`), then stops the container
+after the printer has been idle for 5 minutes (`IDLE_GRACE_SEC`). While the
+stream is off the site shows the 3D model instead of a dead player, because
+the publisher only advertises `streamUrl` during a print. Turn on auto-start
+and auto-stop for the stream in YouTube Studio so it goes live and ends with
+the relay.
+
+Install it as a systemd user service (the controller uses the publisher's
+scoped AWS key from `.env`, so it needs no extra credentials):
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp camera-relay/bambu-camera-controller.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now bambu-camera-controller
+loginctl enable-linger "$USER"   # keep it running without a login session
+journalctl --user -u bambu-camera-controller -f
+```
+
+---
 
 If ffmpeg exits immediately with a codec/negotiation error, YouTube
 likely rejected the passthrough stream — edit `camera-relay/relay.sh` and

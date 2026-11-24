@@ -311,7 +311,10 @@ class PrinterState:
             "ams": self.active_ams_slots(),
             "printHistory": self.history,
             "snapshotUrl": None,
-            "streamUrl": self.stream_url,
+            # Only advertise the stream while a print is active: camera-relay is
+            # started on demand (see camera-relay/controller.sh), so outside a
+            # print the embed would be a dead player.
+            "streamUrl": self.stream_url if status in ("PRINTING", "PAUSED") else None,
             "updatedAt": datetime.now(timezone.utc).isoformat(),
             "publisherStartedAt": self.started_at,
         }
