@@ -559,7 +559,10 @@ class BambuCloudTasks:
             resp = self.session.get(
                 f"{CLOUD_API_BASE}/v1/user-service/my/tasks",
                 params={"deviceId": self.serial, "limit": limit},
-                headers={**CLOUD_API_HEADERS, "Authorization": f"Bearer {self.access_token}"},
+                # No User-Agent override: Cloudflare 403s the bambu_network_agent UA
+                # combined with X-BBL-* headers against cloudscraper's Chrome fingerprint.
+                headers={**{k: v for k, v in CLOUD_API_HEADERS.items() if k != "User-Agent"},
+                         "Authorization": f"Bearer {self.access_token}"},
                 timeout=20,
             )
             resp.raise_for_status()
