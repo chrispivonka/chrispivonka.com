@@ -20,7 +20,11 @@ while true; do
   # -c:v copy passes the printer's H.264 through untouched (cheap on a Pi).
   # If YouTube rejects the stream (codec/profile mismatch), swap the video
   # line for: -c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k
-  ffmpeg -rtsp_transport tcp -i "$RTSPS_URL" \
+  # -timeout (microseconds) makes a stalled camera connection fail instead of
+  # hanging forever, so this loop can reconnect. The printer allows only one
+  # camera client at a time; a second one (e.g. Bambu Studio, or a test) can
+  # kick this relay off and leave ffmpeg waiting on a dead socket.
+  ffmpeg -rtsp_transport tcp -timeout 10000000 -i "$RTSPS_URL" \
     -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 \
     -c:v copy \
     -c:a aac -b:a 128k \
