@@ -632,6 +632,49 @@ journalctl --user -u bambu-camera-controller -f
 
 ---
 
+### 8e. Look up the live video ID automatically (keeps the stream unlisted)
+
+YouTube can give each new broadcast a new video ID, so a fixed
+`YOUTUBE_VIDEO_ID` goes stale whenever the stream ends. With YouTube API
+access the publisher looks up the active broadcast every 30s while printing
+and falls back to `YOUTUBE_VIDEO_ID` if the lookup fails. While nothing is
+live yet the page shows the 3D model instead of an embed.
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a
+   project (e.g. `3d-printer-stream`) and make sure it's selected.
+2. **APIs & Services > Library**: search **YouTube Data API v3** and click
+   **Enable**.
+3. Open the **Google Auth Platform** pages (console search: "Google Auth
+   Platform"). If it offers **Get started**, fill in an app name and your
+   email and choose **External** as the audience. Then, on **Audience**, click
+   **Publish app** so the status is **In production**. In *Testing* status,
+   Google expires refresh tokens after 7 days. The app stays unverified for
+   this scope, so you'll click through a warning once; that's fine for a
+   personal app.
+4. On the **Clients** page click **CREATE CLIENT**, choose application type
+   **Desktop app**, name it, and click **CREATE**. Copy the **client secret
+   now**: Google shows it in full only at creation (afterwards only the last
+   four characters). Put the client ID and secret in `.env` as
+   `YOUTUBE_OAUTH_CLIENT_ID` and `YOUTUBE_OAUTH_CLIENT_SECRET`.
+5. On the machine with a browser, from `subdomains/3dprinting`:
+
+   ```bash
+   python3 youtube_auth.py
+   ```
+
+   Approve read-only access as the account that owns the channel. It writes
+   `YOUTUBE_OAUTH_REFRESH_TOKEN` into `.env` (never printed) and prints the
+   channel name so a wrong account is obvious.
+6. `docker compose up -d --build bambu-publisher`. The log shows
+   `Live stream: found a live broadcast` once the relay is up during a print.
+
+The token only has the `youtube.readonly` scope, which Google's docs list as
+sufficient for `liveBroadcasts.list`. Set `YOUTUBE_CHANNEL_ID` to get a warning
+if you approve the wrong channel. If the token is ever revoked, lookups fail quietly
+and the fallback ID is used; rerun `youtube_auth.py` to fix it.
+
+---
+
 If ffmpeg exits immediately with a codec/negotiation error, YouTube
 likely rejected the passthrough stream — edit `camera-relay/relay.sh` and
 swap `-c:v copy` for `-c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k`,
